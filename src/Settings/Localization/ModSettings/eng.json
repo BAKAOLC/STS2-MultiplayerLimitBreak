@@ -1,0 +1,11 @@
+{
+  "mod.displayName": "Multiplayer Limit Break",
+  "page.title": "Settings",
+  "page.description": "Extends multiplayer lobby capacity only when enabled by the host.",
+  "section.compatibility": "Compatibility",
+  "limitBreak.label": "Enable 16-player limit break",
+  "limitBreak.description": "When off, protocol bit widths and lobby limits stay vanilla-compatible.",
+  "section.scaling": "Player Scaling",
+  "extraPlayerScalingMultiplier.label": "Extra Player Scaling",
+  "extraPlayerScalingMultiplier.description": "Applies only when limit break is enabled. Values above 4 players scale as 4 plus extra players times this multiplier."
+}

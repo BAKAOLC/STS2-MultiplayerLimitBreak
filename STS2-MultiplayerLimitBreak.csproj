@@ -1,0 +1,47 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+    <Import Project=".\local.props" Condition="Exists('.\local.props')"/>
+
+    <PropertyGroup>
+        <RootNamespace>STS2MultiplayerLimitBreak</RootNamespace>
+        <AssemblyName>STS2-MultiplayerLimitBreak</AssemblyName>
+        <TargetFramework>net9.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>true</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <NoWarn>CS0436</NoWarn>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <Sts2Dir Condition="'$(Sts2Dir)' == ''">E:\SteamLibrary\steamapps\common\Slay the Spire 2</Sts2Dir>
+        <Sts2DataDir Condition="'$(Sts2DataDir)' == ''">$(Sts2Dir)\data_sts2_windows_x86_64</Sts2DataDir>
+        <ModOutputDir>$(Sts2Dir)\mods\$(AssemblyName)\</ModOutputDir>
+        <RitsuLibDll Condition="'$(RitsuLibDll)' == ''">$(Sts2Dir)\mods\STS2-RitsuLib\STS2-RitsuLib.dll</RitsuLibDll>
+    </PropertyGroup>
+
+    <Target Name="ValidateSts2References" BeforeTargets="ResolveAssemblyReferences">
+        <Error Condition="!Exists('$(Sts2DataDir)\sts2.dll')" Text="Could not find sts2.dll under '$(Sts2DataDir)'."/>
+        <Error Condition="!Exists('$(Sts2DataDir)\0Harmony.dll')" Text="Could not find 0Harmony.dll under '$(Sts2DataDir)'."/>
+        <Error Condition="!Exists('$(RitsuLibDll)')" Text="Could not find STS2-RitsuLib.dll at '$(RitsuLibDll)'."/>
+    </Target>
+
+    <ItemGroup>
+        <Reference Include="sts2" HintPath="$(Sts2DataDir)\sts2.dll" Private="false"/>
+        <Reference Include="0Harmony" HintPath="$(Sts2DataDir)\0Harmony.dll" Private="false"/>
+        <Reference Include="STS2-RitsuLib" HintPath="$(RitsuLibDll)" Private="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="mod_manifest.json"/>
+        <EmbeddedResource Include="src\Settings\Localization\ModSettings\*.json">
+            <LogicalName>$(RootNamespace).Settings.Localization.ModSettings.%(Filename)%(Extension)</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <Target Name="Copy Mod" AfterTargets="PostBuildEvent">
+        <Message Text="Copying STS2-MultiplayerLimitBreak to Slay the Spire 2 mods folder..." Importance="high"/>
+        <MakeDir Directories="$(ModOutputDir)"/>
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModOutputDir)"/>
+        <Copy SourceFiles="$(MSBuildProjectDirectory)\mod_manifest.json" DestinationFolder="$(ModOutputDir)"/>
+    </Target>
+</Project>

@@ -1,0 +1,6 @@
+.godot/
+.idea/
+bin/
+obj/
+local.props
+*.DotSettings.user
