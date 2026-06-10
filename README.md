@@ -10,7 +10,7 @@
 
 ## 依赖
 
-- [STS2-RitsuLib](https://github.com/OLC-0/sts-2-ritsulib) 0.4.13 或更高版本
+- [STS2-RitsuLib](https://github.com/BAKAOLC/sts-2-ritsulib) 0.4.13 或更高版本
 
 ## Reference
 
@@ -22,6 +22,6 @@ A Slay the Spire 2 mod that raises the multiplayer player limit from the vanilla
 
 The limit break is disabled by default to keep compatibility with vanilla clients. Enable it from the RitsuLib settings when needed.
 
-Requires [STS2-RitsuLib](https://github.com/OLC-0/sts-2-ritsulib) 0.4.13 or later.
+Requires [STS2-RitsuLib](https://github.com/BAKAOLC/sts-2-ritsulib) 0.4.13 or later.
 
 The basic idea for this project comes from [Rain156/sts2-RMP-Mods](https://github.com/Rain156/sts2-RMP-Mods).
