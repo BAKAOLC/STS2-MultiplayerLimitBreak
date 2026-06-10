@@ -16,6 +16,22 @@ namespace STS2MultiplayerLimitBreak.Settings
 
         public static double ExtraPlayerScalingMultiplier => Current.ExtraPlayerScalingMultiplier;
 
+        private static HostSettingsSnapshot Current
+        {
+            get
+            {
+                var netService = RunManager.Instance?.NetService;
+                if (netService is NetClientGameService)
+                    lock (Gate)
+                    {
+                        if (_remoteHostSettings is { } remote)
+                            return remote;
+                    }
+
+                return BuildLocalSnapshot();
+            }
+        }
+
         public static void Initialize()
         {
             lock (Gate)
@@ -67,24 +83,6 @@ namespace STS2MultiplayerLimitBreak.Settings
             }
 
             RitsuLibSidecarConfigSyncService.PublishHostState(netService, Const.HostSettingsSyncTopic, 0, reason);
-        }
-
-        private static HostSettingsSnapshot Current
-        {
-            get
-            {
-                var netService = RunManager.Instance?.NetService;
-                if (netService is NetClientGameService)
-                {
-                    lock (Gate)
-                    {
-                        if (_remoteHostSettings is { } remote)
-                            return remote;
-                    }
-                }
-
-                return BuildLocalSnapshot();
-            }
         }
 
         private static void RegisterTopicFromLocalSettings()

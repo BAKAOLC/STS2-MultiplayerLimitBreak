@@ -16,19 +16,17 @@
         <Sts2Dir Condition="'$(Sts2Dir)' == ''">E:\SteamLibrary\steamapps\common\Slay the Spire 2</Sts2Dir>
         <Sts2DataDir Condition="'$(Sts2DataDir)' == ''">$(Sts2Dir)\data_sts2_windows_x86_64</Sts2DataDir>
         <ModOutputDir>$(Sts2Dir)\mods\$(AssemblyName)\</ModOutputDir>
-        <RitsuLibDll Condition="'$(RitsuLibDll)' == ''">$(Sts2Dir)\mods\STS2-RitsuLib\STS2-RitsuLib.dll</RitsuLibDll>
     </PropertyGroup>
 
     <Target Name="ValidateSts2References" BeforeTargets="ResolveAssemblyReferences">
         <Error Condition="!Exists('$(Sts2DataDir)\sts2.dll')" Text="Could not find sts2.dll under '$(Sts2DataDir)'."/>
         <Error Condition="!Exists('$(Sts2DataDir)\0Harmony.dll')" Text="Could not find 0Harmony.dll under '$(Sts2DataDir)'."/>
-        <Error Condition="!Exists('$(RitsuLibDll)')" Text="Could not find STS2-RitsuLib.dll at '$(RitsuLibDll)'."/>
     </Target>
 
     <ItemGroup>
         <Reference Include="sts2" HintPath="$(Sts2DataDir)\sts2.dll" Private="false"/>
         <Reference Include="0Harmony" HintPath="$(Sts2DataDir)\0Harmony.dll" Private="false"/>
-        <Reference Include="STS2-RitsuLib" HintPath="$(RitsuLibDll)" Private="false"/>
+        <PackageReference Include="STS2.RitsuLib" Version="[0.4.13,)" PrivateAssets="all" ExcludeAssets="runtime"/>
     </ItemGroup>
 
     <ItemGroup>

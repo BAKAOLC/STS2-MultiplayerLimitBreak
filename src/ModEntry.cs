@@ -33,6 +33,7 @@ namespace STS2MultiplayerLimitBreak
         private static void ApplyNetworkPatches()
         {
             var patcher = RitsuLibFramework.CreatePatcher(Const.ModId, "network", "multiplayer limit");
+            GameplayRelevantModListPatches.AddTo(patcher);
             MultiplayerLimitPatches.AddTo(patcher);
             SerializationBitWidthPatches.AddTo(patcher);
             RitsuLibFramework.ApplyRequiredPatcher(

@@ -122,7 +122,8 @@ namespace STS2MultiplayerLimitBreak.Network
         {
             public static string PatchId => "mlb_host_peer_ready_settings_sync";
 
-            public static string Description => "Broadcast host limit-break settings after a peer becomes broadcast-ready";
+            public static string Description =>
+                "Broadcast host limit-break settings after a peer becomes broadcast-ready";
 
             public static ModPatchTarget[] GetTargets()
             {

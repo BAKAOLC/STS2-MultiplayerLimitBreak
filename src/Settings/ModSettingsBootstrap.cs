@@ -1,3 +1,4 @@
+using MegaCrit.Sts2.Core.Runs;
 using STS2RitsuLib;
 using STS2RitsuLib.Settings;
 
@@ -26,6 +27,9 @@ namespace STS2MultiplayerLimitBreak.Settings
                         settings => settings.LimitBreakEnabled,
                         (settings, value) =>
                         {
+                            if (!CanEditSettings())
+                                return;
+
                             settings.LimitBreakEnabled = value;
                             RuntimeMultiplayerSettings.PublishHostSettings("settings_changed");
                         }),
@@ -37,6 +41,9 @@ namespace STS2MultiplayerLimitBreak.Settings
                         settings => settings.ExtraPlayerScalingMultiplier,
                         (settings, value) =>
                         {
+                            if (!CanEditSettings())
+                                return;
+
                             settings.ExtraPlayerScalingMultiplier = ClampExtraPlayerScalingMultiplier(value);
                             RuntimeMultiplayerSettings.PublishHostSettings("settings_changed");
                         }),
@@ -48,6 +55,7 @@ namespace STS2MultiplayerLimitBreak.Settings
                     .WithDescription(ModSettingsLocalization.T(
                         "page.description",
                         "Extends multiplayer lobby capacity only when enabled by the host."))
+                    .WithReadOnlyOnHostSurfaces(ModSettingsHostSurface.RunPause | ModSettingsHostSurface.CombatPause)
                     .AddSection("compatibility", section => section
                         .WithTitle(ModSettingsLocalization.T("section.compatibility", "Compatibility"))
                         .AddToggle(
@@ -75,6 +83,11 @@ namespace STS2MultiplayerLimitBreak.Settings
 
                 _initialized = true;
             }
+        }
+
+        private static bool CanEditSettings()
+        {
+            return RunManager.Instance?.IsInProgress != true;
         }
 
         private static double ClampExtraPlayerScalingMultiplier(double value)

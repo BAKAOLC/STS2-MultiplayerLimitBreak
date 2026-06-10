@@ -17,7 +17,8 @@ namespace STS2MultiplayerLimitBreak.Network
     internal static class DifficultyScalingPatches
     {
         private static readonly MethodInfo EffectivePlayerCountMethod =
-            AccessTools.Method(typeof(RuntimeMultiplayerSettings), nameof(RuntimeMultiplayerSettings.GetEffectivePlayerCount))
+            AccessTools.Method(typeof(RuntimeMultiplayerSettings),
+                nameof(RuntimeMultiplayerSettings.GetEffectivePlayerCount))
             ?? throw new InvalidOperationException("Effective player-count helper was not found.");
 
         private static readonly MethodInfo? CombatStatePlayersGetter =
@@ -126,7 +127,8 @@ namespace STS2MultiplayerLimitBreak.Network
             string operation)
         {
             var resolvedPlayersGetter = playersGetter
-                                        ?? throw new InvalidOperationException($"{operation}: players getter was not found.");
+                                        ?? throw new InvalidOperationException(
+                                            $"{operation}: players getter was not found.");
             var rewriter = HarmonyIlRewriter.From(instructions);
             var awaitingCount = false;
             var report = rewriter.ReplaceEach(
