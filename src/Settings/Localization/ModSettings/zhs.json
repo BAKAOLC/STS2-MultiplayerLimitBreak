@@ -1,10 +1,10 @@
 {
   "mod.displayName": "多人上限解限",
   "page.title": "设置",
-  "page.description": "仅在房主启用时扩展多人大厅人数上限。",
-  "section.compatibility": "兼容性",
+  "page.description": "将多人大厅人数上限提高到 16 人。",
+  "section.compatibility": "人数上限",
   "limitBreak.label": "启用 16 人破限",
-  "limitBreak.description": "关闭时保持原版协议位宽和大厅上限，兼容原版客户端。",
+  "limitBreak.description": "控制是否启用多人上限解限。",
   "section.scaling": "人数倍率",
   "extraPlayerScalingMultiplier.label": "额外人数倍率",
   "extraPlayerScalingMultiplier.description": "仅在人数破限启用时生效。超过 4 人的部分按该倍率参与原版多人缩放。"

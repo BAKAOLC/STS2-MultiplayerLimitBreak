@@ -33,7 +33,7 @@ namespace STS2MultiplayerLimitBreak.Settings
                             settings.LimitBreakEnabled = value;
                             RuntimeMultiplayerSettings.PublishHostSettings("settings_changed");
                         }),
-                    () => false);
+                    () => ModSettings.DefaultLimitBreakEnabled);
                 IModSettingsValueBinding<double> extraPlayerScalingMultiplierBinding = ModSettingsBindings.WithDefault(
                     ModSettingsBindings.Global<ModSettings, double>(
                         Const.ModId,
@@ -54,17 +54,17 @@ namespace STS2MultiplayerLimitBreak.Settings
                     .WithTitle(ModSettingsLocalization.T("page.title", "Settings"))
                     .WithDescription(ModSettingsLocalization.T(
                         "page.description",
-                        "Extends multiplayer lobby capacity only when enabled by the host."))
+                        "Raises the multiplayer lobby capacity to 16 players."))
                     .WithReadOnlyOnHostSurfaces(ModSettingsHostSurface.RunPause | ModSettingsHostSurface.CombatPause)
                     .AddSection("compatibility", section => section
-                        .WithTitle(ModSettingsLocalization.T("section.compatibility", "Compatibility"))
+                        .WithTitle(ModSettingsLocalization.T("section.compatibility", "Player Limit"))
                         .AddToggle(
                             "limit_break_enabled",
                             ModSettingsLocalization.T("limitBreak.label", "Enable 16-player limit break"),
                             limitBreakBinding,
                             ModSettingsLocalization.T(
                                 "limitBreak.description",
-                                "When off, protocol bit widths and lobby limits stay vanilla-compatible.")))
+                                "Controls whether the multiplayer limit break is active.")))
                     .AddSection("scaling", section => section
                         .WithTitle(ModSettingsLocalization.T("section.scaling", "Player Scaling"))
                         .AddSlider(
