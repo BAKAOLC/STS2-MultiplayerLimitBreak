@@ -4,7 +4,9 @@
   "page.description": "Raises the multiplayer lobby capacity to 16 players.",
   "section.compatibility": "Player Limit",
   "limitBreak.label": "Enable 16-player limit break",
-  "limitBreak.description": "Controls whether the multiplayer limit break is active.",
+  "limitBreak.descriptionWithStatus": "Current status: {0}. Controls whether the multiplayer limit break is active.",
+  "limitBreak.status.enabled": "enabled",
+  "limitBreak.status.disabled": "disabled",
   "section.scaling": "Player Scaling",
   "extraPlayerScalingMultiplier.label": "Extra Player Scaling",
   "extraPlayerScalingMultiplier.description": "Applies only when limit break is enabled. Values above 4 players scale as 4 plus extra players times this multiplier."

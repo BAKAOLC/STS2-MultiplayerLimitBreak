@@ -62,9 +62,19 @@ namespace STS2MultiplayerLimitBreak.Settings
                             "limit_break_enabled",
                             ModSettingsLocalization.T("limitBreak.label", "Enable 16-player limit break"),
                             limitBreakBinding,
-                            ModSettingsLocalization.T(
-                                "limitBreak.description",
-                                "Controls whether the multiplayer limit break is active.")))
+                            ModSettingsText.Dynamic(
+                                () =>
+                                {
+                                    var enabled = limitBreakBinding.Read();
+                                    return string.Format(
+                                        ModSettingsLocalization.Get(
+                                            "limitBreak.descriptionWithStatus",
+                                            "Current status: {0}. Controls whether the multiplayer limit break is active."),
+                                        ModSettingsLocalization.Get(
+                                            enabled ? "limitBreak.status.enabled" : "limitBreak.status.disabled",
+                                            enabled ? "enabled" : "disabled"));
+                                },
+                                limitBreakBinding)))
                     .AddSection("scaling", section => section
                         .WithTitle(ModSettingsLocalization.T("section.scaling", "Player Scaling"))
                         .AddSlider(

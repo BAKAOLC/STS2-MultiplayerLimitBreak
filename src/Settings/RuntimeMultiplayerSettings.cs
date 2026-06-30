@@ -39,8 +39,9 @@ namespace STS2MultiplayerLimitBreak.Settings
                 if (_initialized)
                     return;
 
-                RegisterTopicFromLocalSettings();
                 RitsuLibSidecarConfigSyncService.TopicChanged += OnTopicChanged;
+                RitsuLibSidecarSessionManager.HandshakeCompleted += OnHandshakeCompleted;
+                RegisterTopicFromLocalSettings();
                 _initialized = true;
             }
         }
@@ -117,6 +118,12 @@ namespace STS2MultiplayerLimitBreak.Settings
             {
                 _remoteHostSettings = snapshot;
             }
+        }
+
+        private static void OnHandshakeCompleted(SidecarHandshakeCompletedEvent ev)
+        {
+            if (RunManager.Instance?.NetService is NetHostGameService host)
+                PublishHostSettings(host, $"handshake_completed:{ev.PeerNetId}");
         }
 
         private sealed record HostSettingsSnapshot(

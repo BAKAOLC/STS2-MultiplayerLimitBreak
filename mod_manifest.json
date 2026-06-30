@@ -3,7 +3,7 @@
   "name": "Multiplayer Limit Break",
   "author": "OLC",
   "description": "Adds a RitsuLib setting for a 16-player multiplayer limit break, related room layouts, and multiplayer scaling.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true,
