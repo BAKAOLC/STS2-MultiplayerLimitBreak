@@ -4,6 +4,8 @@ namespace STS2MultiplayerLimitBreak
     {
         internal const string ModId = "STS2-MultiplayerLimitBreak";
 
+        internal const string Version = "0.1.3";
+
         internal const string SettingsKey = "settings";
 
         internal const string SettingsFileName = "settings.json";

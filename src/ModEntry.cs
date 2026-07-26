@@ -27,7 +27,8 @@ namespace STS2MultiplayerLimitBreak
             ApplyDifficultyScalingPatches();
             if (!IsActive) return;
 
-            Log.Info($"{Const.ModId} loaded. Limit break enabled: {RuntimeMultiplayerSettings.LimitBreakEnabled}.");
+            Log.Info(
+                $"{Const.ModId} {Const.Version} loaded. Limit break enabled: {RuntimeMultiplayerSettings.LimitBreakEnabled}.");
         }
 
         private static void ApplyNetworkPatches()

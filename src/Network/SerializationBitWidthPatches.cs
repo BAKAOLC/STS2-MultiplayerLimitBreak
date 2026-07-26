@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
-using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using STS2MultiplayerLimitBreak.Settings;
@@ -13,6 +12,11 @@ namespace STS2MultiplayerLimitBreak.Network
 {
     internal static class SerializationBitWidthPatches
     {
+        private static readonly Type LobbyPlayerType =
+            AccessTools.TypeByName("MegaCrit.Sts2.Core.Entities.Multiplayer.StartRunLobbyPlayer")
+            ?? AccessTools.TypeByName("MegaCrit.Sts2.Core.Entities.Multiplayer.LobbyPlayer")
+            ?? throw new TypeLoadException("Could not find the start-run lobby player type.");
+
         private static readonly MethodInfo? WriteIntWithBits =
             AccessTools.Method(typeof(PacketWriter), nameof(PacketWriter.WriteInt), [typeof(int), typeof(int)]);
 
@@ -149,7 +153,7 @@ namespace STS2MultiplayerLimitBreak.Network
             {
                 return
                 [
-                    new(typeof(LobbyPlayer), nameof(LobbyPlayer.Serialize)),
+                    new(LobbyPlayerType, nameof(IPacketSerializable.Serialize)),
                 ];
             }
 
@@ -171,7 +175,7 @@ namespace STS2MultiplayerLimitBreak.Network
             {
                 return
                 [
-                    new(typeof(LobbyPlayer), nameof(LobbyPlayer.Deserialize)),
+                    new(LobbyPlayerType, nameof(IPacketSerializable.Deserialize)),
                 ];
             }
 
