@@ -2,6 +2,7 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
 using STS2MultiplayerLimitBreak.Layout;
 using STS2MultiplayerLimitBreak.Network;
+using STS2MultiplayerLimitBreak.Network.Protocol;
 using STS2MultiplayerLimitBreak.Settings;
 using STS2RitsuLib;
 
@@ -27,8 +28,7 @@ namespace STS2MultiplayerLimitBreak
             ApplyDifficultyScalingPatches();
             if (!IsActive) return;
 
-            Log.Info(
-                $"{Const.ModId} {Const.Version} loaded. Limit break enabled: {RuntimeMultiplayerSettings.LimitBreakEnabled}.");
+            Log.Info($"{Const.ModId} {Const.Version} loaded with wire protocol {Const.WireProtocolVersion}.");
         }
 
         private static void ApplyNetworkPatches()
@@ -36,11 +36,13 @@ namespace STS2MultiplayerLimitBreak
             var patcher = RitsuLibFramework.CreatePatcher(Const.ModId, "network", "multiplayer limit");
             GameplayRelevantModListPatches.AddTo(patcher);
             MultiplayerLimitPatches.AddTo(patcher);
-            SerializationBitWidthPatches.AddTo(patcher);
+            MlbProtocolPatches.AddTo(patcher);
             RitsuLibFramework.ApplyRequiredPatcher(
                 patcher,
                 DisableMod,
                 "Required multiplayer limit patches failed. STS2-MultiplayerLimitBreak will be disabled.");
+            if (IsActive)
+                MlbProtocolPatches.InitializeExtensions();
         }
 
         private static void ApplyLayoutPatches()

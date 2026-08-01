@@ -1,13 +1,21 @@
 {
   "mod.displayName": "多人上限解限",
   "page.title": "设置",
-  "page.description": "将多人大厅人数上限提高到 16 人。",
-  "section.compatibility": "人数上限",
-  "limitBreak.label": "启用 16 人破限",
-  "limitBreak.descriptionWithStatus": "当前状态：{0}。控制是否启用多人上限解限。",
-  "limitBreak.status.enabled": "已开启",
-  "limitBreak.status.disabled": "已关闭",
+  "page.description": "自动将协议兼容的多人大厅扩展至 16 人。",
   "section.scaling": "人数倍率",
   "extraPlayerScalingMultiplier.label": "额外人数倍率",
-  "extraPlayerScalingMultiplier.description": "仅在人数破限启用时生效。超过 4 人的部分按该倍率参与原版多人缩放。"
+  "extraPlayerScalingMultiplier.description": "超过 4 人的部分按该倍率参与原版多人缩放。",
+  "toast.incompatibleAccepted.title": "房间扩容受限",
+  "toast.incompatibleAccepted.body": "玩家 {0} 不支持当前多人扩展协议。该玩家留在房间期间，房间无法安全扩展至 4 人以上。",
+  "toast.expansionBlocked.title": "无法扩容房间",
+  "toast.expansionBlocked.body": "房间内已有不兼容的玩家：{0}。为避免不安全扩容，已拒绝 {1} 加入。",
+  "toast.protocolMismatchRejected.body": "玩家 {0} 使用了不兼容的多人扩展协议，已拒绝其加入。",
+  "toast.unsupportedRejected.title": "已拒绝不兼容玩家",
+  "toast.unsupportedRejected.body": "玩家 {0} 不支持所需的多人扩展协议，已拒绝其加入。",
+  "toast.clientExistingBlockers.body": "房间内存在不兼容的玩家：{0}，因此目前无法安全扩容。房主已拒绝你加入。",
+  "toast.clientProtocolMismatch.body": "你的多人扩展协议与该房间不兼容，房主已拒绝你加入。",
+  "toast.clientUnsupported.body": "该房间要求受支持的多人扩展协议，房主已拒绝你加入。",
+  "toast.clientRejected.title": "无法加入扩容房间",
+  "toast.expansionAvailable.title": "房间现在可以扩容",
+  "toast.expansionAvailable.body": "当前所有玩家均支持多人扩展，房间现在可以安全容纳至多 16 名玩家。"
 }

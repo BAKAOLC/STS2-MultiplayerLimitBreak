@@ -26,7 +26,7 @@ namespace STS2MultiplayerLimitBreak.Layout
 
         private static void Reposition(IReadOnlyList<NMerchantCharacter> visuals)
         {
-            if (!RuntimeMultiplayerSettings.LimitBreakEnabled || visuals.Count <= Const.VanillaPlayerLimit) return;
+            if (visuals.Count <= Const.VanillaPlayerLimit) return;
 
             var rowCount = visuals.Count <= Const.VanillaPlayerLimit * 2
                 ? 2

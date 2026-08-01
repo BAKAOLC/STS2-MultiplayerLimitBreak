@@ -1,13 +1,21 @@
 {
   "mod.displayName": "Multiplayer Limit Break",
   "page.title": "Settings",
-  "page.description": "Raises the multiplayer lobby capacity to 16 players.",
-  "section.compatibility": "Player Limit",
-  "limitBreak.label": "Enable 16-player limit break",
-  "limitBreak.descriptionWithStatus": "Current status: {0}. Controls whether the multiplayer limit break is active.",
-  "limitBreak.status.enabled": "enabled",
-  "limitBreak.status.disabled": "disabled",
+  "page.description": "Automatically expands compatible multiplayer lobbies to 16 players.",
   "section.scaling": "Player Scaling",
   "extraPlayerScalingMultiplier.label": "Extra Player Scaling",
-  "extraPlayerScalingMultiplier.description": "Applies only when limit break is enabled. Values above 4 players scale as 4 plus extra players times this multiplier."
+  "extraPlayerScalingMultiplier.description": "Values above 4 players scale as 4 plus extra players times this multiplier.",
+  "toast.incompatibleAccepted.title": "Expansion limited",
+  "toast.incompatibleAccepted.body": "Player {0} does not support the current multiplayer extension protocol. The room cannot safely expand beyond 4 players while they remain.",
+  "toast.expansionBlocked.title": "Cannot expand room",
+  "toast.expansionBlocked.body": "The room already contains incompatible players: {0}. {1}'s join was rejected to prevent unsafe expansion.",
+  "toast.protocolMismatchRejected.body": "Player {0} uses an incompatible multiplayer extension protocol and was rejected.",
+  "toast.unsupportedRejected.title": "Incompatible player rejected",
+  "toast.unsupportedRejected.body": "Player {0} does not support the required multiplayer extension protocol and was rejected.",
+  "toast.clientExistingBlockers.body": "The room cannot safely expand because it contains incompatible players: {0}. The host rejected your join.",
+  "toast.clientProtocolMismatch.body": "Your multiplayer extension protocol is incompatible with this room. The host rejected your join.",
+  "toast.clientUnsupported.body": "This room requires a supported multiplayer extension protocol. The host rejected your join.",
+  "toast.clientRejected.title": "Unable to join expanded room",
+  "toast.expansionAvailable.title": "Room can now expand",
+  "toast.expansionAvailable.body": "All remaining players support multiplayer expansion. The room can now safely hold up to 16 players."
 }

@@ -12,8 +12,6 @@ namespace STS2MultiplayerLimitBreak.Settings
         private static bool _initialized;
         private static HostSettingsSnapshot? _remoteHostSettings;
 
-        public static bool LimitBreakEnabled => Current.LimitBreakEnabled;
-
         public static double ExtraPlayerScalingMultiplier => Current.ExtraPlayerScalingMultiplier;
 
         private static HostSettingsSnapshot Current
@@ -48,7 +46,7 @@ namespace STS2MultiplayerLimitBreak.Settings
 
         public static int GetEffectivePlayerCount(int rawCount)
         {
-            if (!LimitBreakEnabled || rawCount <= Const.VanillaPlayerLimit)
+            if (rawCount <= Const.VanillaPlayerLimit)
                 return rawCount;
 
             var extraPlayers = rawCount - Const.VanillaPlayerLimit;
@@ -69,6 +67,15 @@ namespace STS2MultiplayerLimitBreak.Settings
             lock (Gate)
             {
                 _remoteHostSettings = null;
+            }
+        }
+
+        public static void ApplyRemoteHostSettings(double extraPlayerScalingMultiplier)
+        {
+            lock (Gate)
+            {
+                _remoteHostSettings = new(
+                    ModSettingsBootstrap.ClampExtraPlayerScalingMultiplier(extraPlayerScalingMultiplier));
             }
         }
 
@@ -97,9 +104,7 @@ namespace STS2MultiplayerLimitBreak.Settings
 
         private static HostSettingsSnapshot BuildLocalSnapshot()
         {
-            return new(
-                ModSettingsBootstrap.LimitBreakEnabled,
-                ModSettingsBootstrap.ExtraPlayerScalingMultiplier);
+            return new(ModSettingsBootstrap.ExtraPlayerScalingMultiplier);
         }
 
         private static void OnTopicChanged(SidecarConfigTopicChangedEvent ev)
@@ -126,8 +131,6 @@ namespace STS2MultiplayerLimitBreak.Settings
                 PublishHostSettings(host, $"handshake_completed:{ev.PeerNetId}");
         }
 
-        private sealed record HostSettingsSnapshot(
-            bool LimitBreakEnabled,
-            double ExtraPlayerScalingMultiplier);
+        private sealed record HostSettingsSnapshot(double ExtraPlayerScalingMultiplier);
     }
 }

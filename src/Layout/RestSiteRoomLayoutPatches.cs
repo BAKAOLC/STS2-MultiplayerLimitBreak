@@ -56,7 +56,7 @@ namespace STS2MultiplayerLimitBreak.Layout
             if (containers.Count == 0)
                 throw new InvalidOperationException("No rest site character containers were found.");
 
-            if (RuntimeMultiplayerSettings.LimitBreakEnabled) EnsureContainers(containers, index + 1);
+            EnsureContainers(containers, index + 1);
 
             return containers[NormalizeWrappedIndex(index, containers.Count)];
         }

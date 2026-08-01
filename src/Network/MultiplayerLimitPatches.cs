@@ -27,7 +27,7 @@ namespace STS2MultiplayerLimitBreak.Network
 
         private static void SetLobbyLimit(StartRunLobby lobby)
         {
-            if (!RuntimeMultiplayerSettings.LimitBreakEnabled || lobby.NetService.Type != NetGameType.Host) return;
+            if (lobby.NetService.Type != NetGameType.Host) return;
 
             RuntimeMultiplayerSettings.PublishHostSettings(lobby.NetService, "lobby_limit");
 
@@ -53,7 +53,7 @@ namespace STS2MultiplayerLimitBreak.Network
             private static void Prefix(NetHostGameService __instance, ref int maxClients)
             {
                 RuntimeMultiplayerSettings.PublishHostSettings(__instance, "start_enet_host");
-                if (RuntimeMultiplayerSettings.LimitBreakEnabled) maxClients = Math.Max(maxClients, Const.PlayerLimit);
+                maxClients = Math.Max(maxClients, Const.PlayerLimit);
             }
         }
 
@@ -74,7 +74,7 @@ namespace STS2MultiplayerLimitBreak.Network
             private static void Prefix(NetHostGameService __instance, ref int maxClients)
             {
                 RuntimeMultiplayerSettings.PublishHostSettings(__instance, "start_steam_host");
-                if (RuntimeMultiplayerSettings.LimitBreakEnabled) maxClients = Math.Max(maxClients, Const.PlayerLimit);
+                maxClients = Math.Max(maxClients, Const.PlayerLimit);
             }
         }
 

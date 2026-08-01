@@ -36,8 +36,6 @@ namespace STS2MultiplayerLimitBreak.Layout
 
         private static void EnsureHolderCount(NTreasureRoomRelicCollection collection)
         {
-            if (!RuntimeMultiplayerSettings.LimitBreakEnabled) return;
-
             var holdersInUse = GetHoldersInUse(collection);
             holdersInUse?.Clear();
 
@@ -78,8 +76,6 @@ namespace STS2MultiplayerLimitBreak.Layout
 
         private static void RepositionHolders(NTreasureRoomRelicCollection collection)
         {
-            if (!RuntimeMultiplayerSettings.LimitBreakEnabled) return;
-
             var holdersInUse = GetHoldersInUse(collection);
             if (holdersInUse == null || holdersInUse.Count <= Const.VanillaPlayerLimit) return;
 

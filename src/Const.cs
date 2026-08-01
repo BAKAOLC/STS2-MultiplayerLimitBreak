@@ -4,7 +4,9 @@ namespace STS2MultiplayerLimitBreak
     {
         internal const string ModId = "STS2-MultiplayerLimitBreak";
 
-        internal const string Version = "0.1.3";
+        internal const string Version = "0.2.0";
+
+        internal const byte WireProtocolVersion = 1;
 
         internal const string SettingsKey = "settings";
 
@@ -16,12 +18,6 @@ namespace STS2MultiplayerLimitBreak
 
         internal const int PlayerLimit = 16;
 
-        internal const int VanillaSlotIdBits = 2;
-
         internal const int SlotIdBits = 4;
-
-        internal const int VanillaLobbyListLengthBits = 3;
-
-        internal const int LobbyListLengthBits = 5;
     }
 }

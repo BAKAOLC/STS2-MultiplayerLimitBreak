@@ -1,5 +1,4 @@
 using MegaCrit.Sts2.Core.Modding;
-using STS2MultiplayerLimitBreak.Settings;
 using STS2RitsuLib.Patching.Core;
 using STS2RitsuLib.Patching.Models;
 
@@ -14,10 +13,10 @@ namespace STS2MultiplayerLimitBreak.Network
 
         private sealed class GameplayRelevantModNameListPatch : IPatchMethod
         {
-            public static string PatchId => "mlb_hide_from_gameplay_mod_list_when_disabled";
+            public static string PatchId => "mlb_hide_from_gameplay_mod_list";
 
             public static string Description =>
-                "Hide this mod from vanilla multiplayer mod checks while limit break is disabled";
+                "Keep this transport mod out of vanilla multiplayer mod checks";
 
             public static ModPatchTarget[] GetTargets()
             {
@@ -29,7 +28,7 @@ namespace STS2MultiplayerLimitBreak.Network
 
             private static void Postfix(ref List<string>? __result)
             {
-                if (RuntimeMultiplayerSettings.LimitBreakEnabled || __result == null)
+                if (__result == null)
                     return;
 
                 __result.RemoveAll(static mod => mod.StartsWith(Const.ModId + "-", StringComparison.Ordinal));
