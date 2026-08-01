@@ -167,10 +167,16 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 throw new InvalidDataException($"Unsupported active MLB protocol version: {protocol}.");
             if (capabilities.Select(entry => entry.PeerId).Distinct().Count() != capabilities.Count)
                 throw new InvalidDataException("MLB snapshot contains duplicate capability peer IDs.");
+            if (capabilities.Count > Const.VanillaPlayerLimit && (!active || players == null))
+                throw new InvalidDataException("Expanded MLB snapshot is missing its complete player roster.");
             if (players == null)
                 return;
             if (players.Select(player => player.Id).Distinct().Count() != players.Count)
                 throw new InvalidDataException("MLB snapshot contains duplicate player IDs.");
+            if (players.Count != capabilities.Count ||
+                !players.Select(player => player.Id).ToHashSet()
+                    .SetEquals(capabilities.Select(entry => entry.PeerId)))
+                throw new InvalidDataException("MLB snapshot player and capability rosters do not match.");
             if (players.Select(player => player.SlotId).Distinct().Count() != players.Count ||
                 players.Any(player => player.SlotId is < 0 or >= Const.PlayerLimit))
                 throw new InvalidDataException("MLB snapshot contains invalid or duplicate player slots.");

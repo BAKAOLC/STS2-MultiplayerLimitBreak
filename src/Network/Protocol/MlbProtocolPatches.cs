@@ -1,20 +1,23 @@
 using System.Reflection;
-using System.Threading;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Daily;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
-using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
-using MegaCrit.Sts2.Core.Saves.Runs;
 using STS2MultiplayerLimitBreak.Settings;
 using STS2RitsuLib.Networking.MessageExtensions;
 using STS2RitsuLib.Patching.Core;
 using STS2RitsuLib.Patching.Models;
+
+// ReSharper disable ClassNeverInstantiated.Local
+// ReSharper disable InconsistentNaming
+// ReSharper disable RedundantAssignment
+// ReSharper disable UnusedMember.Local
+// ReSharper disable UnusedType.Local
 
 namespace STS2MultiplayerLimitBreak.Network.Protocol
 {
@@ -22,9 +25,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
     {
         private static readonly FieldInfo? MaxPlayersField =
             AccessTools.Field(typeof(StartRunLobby), "<MaxPlayers>k__BackingField");
-        private static readonly FieldInfo NetMessageBusWriterField =
-            AccessTools.Field(typeof(NetMessageBus), "_writer")
-            ?? throw new MissingFieldException(typeof(NetMessageBus).FullName, "_writer");
+        private static readonly AccessTools.FieldRef<NetMessageBus, PacketWriter> NetMessageBusWriterRef =
+            AccessTools.FieldRefAccess<NetMessageBus, PacketWriter>("_writer");
+        private static readonly AccessTools.FieldRef<NetMessageBus, PacketReader> NetMessageBusReaderRef =
+            AccessTools.FieldRefAccess<NetMessageBus, PacketReader>("_reader");
 
         private const string ExtensionId = "sts2.multiplayerLimitBreak";
         private const int ExtensionVersion = 1;
@@ -34,14 +38,11 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         public static void AddTo(ModPatcher patcher)
         {
             patcher.RegisterPatch<InitialGameInfoHandlerPatch>();
-            patcher.RegisterPatch<ClientLobbyJoinRequestDeserializePatch>();
+            patcher.RegisterPatch<NetMessageBusDeserializePatch>();
             patcher.RegisterPatch<ClientLobbyJoinRequestHandlerPatch>();
             patcher.RegisterPatch<OtherLobbyJoinRequestHandlerPatch>();
-            patcher.RegisterPatch<ClientLobbyJoinResponseDeserializePatch>();
             patcher.RegisterPatch<ClientLobbyJoinResponseHandlerPatch>();
-            patcher.RegisterPatch<PlayerJoinedDeserializePatch>();
             patcher.RegisterPatch<PlayerJoinedHandlerPatch>();
-            patcher.RegisterPatch<LobbyBeginRunDeserializePatch>();
             patcher.RegisterPatch<LobbyBeginRunHandlerPatch>();
             patcher.RegisterPatch<StartRunLobbyConstructorPatch>();
             patcher.RegisterPatch<StartRunLobbyCleanUpPatch>();
@@ -58,6 +59,16 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                     typeof(NetMessageBus).FullName,
                     nameof(NetMessageBus.SerializeMessage));
 
+            var hostBroadcastDefinition = AccessTools.GetDeclaredMethods(typeof(NetHostGameService))
+                .SingleOrDefault(method =>
+                    method.Name == nameof(NetHostGameService.SendMessage) &&
+                    method is { IsGenericMethodDefinition: true } &&
+                    method.GetParameters().Length == 1);
+            if (hostBroadcastDefinition == null)
+                throw new MissingMethodException(
+                    typeof(NetHostGameService).FullName,
+                    nameof(NetHostGameService.SendMessage));
+
             return patcher.ApplyDynamicPatches(
                 [
                     CreatePatch(
@@ -72,7 +83,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                         "mlb_player_joined_bus_serialize",
                         typeof(PlayerJoinedMessage),
                         typeof(PlayerJoinedNetMessageBusPatch)),
-                    CreatePatch(
+                    CreateBeginRunProjectionPatch(
                         "mlb_begin_run_bus_serialize",
                         typeof(LobbyBeginRunMessage),
                         typeof(LobbyBeginRunNetMessageBusPatch)),
@@ -82,14 +93,26 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             DynamicPatchInfo CreatePatch(string id, Type messageType, Type patchType)
             {
                 var prefix = AccessTools.DeclaredMethod(patchType, "Prefix");
-                var postfix = AccessTools.DeclaredMethod(patchType, "Postfix")
-                              ?? throw new MissingMethodException(patchType.FullName, "Postfix");
+                var postfix = AccessTools.DeclaredMethod(patchType, "Postfix");
+                if (prefix == null && postfix == null)
+                    throw new MissingMethodException(patchType.FullName, "Prefix or Postfix");
                 return new(
                     id,
                     serializeDefinition.MakeGenericMethod(messageType),
                     prefix: prefix == null ? null : new HarmonyMethod(prefix),
-                    postfix: new HarmonyMethod(postfix),
+                    postfix: postfix == null ? null : new HarmonyMethod(postfix),
                     description: $"Serialize {messageType.Name} with its MLB tail at the non-inlined message-bus boundary");
+            }
+
+            DynamicPatchInfo CreateBeginRunProjectionPatch(string id, Type messageType, Type patchType)
+            {
+                var prefix = AccessTools.DeclaredMethod(patchType, "Prefix")
+                             ?? throw new MissingMethodException(patchType.FullName, "Prefix");
+                return new(
+                    id,
+                    hostBroadcastDefinition.MakeGenericMethod(messageType),
+                    prefix: new HarmonyMethod(prefix),
+                    description: "Project LobbyBeginRunMessage at the host broadcast boundary before serialization");
             }
         }
 
@@ -174,7 +197,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
         private static byte[] WriteBeginRunExtension(LobbyBeginRunMessage message)
         {
-            var fullPlayers = MlbGameApiCompat.ReadPlayers(message);
+            var lobby = MlbLobbyProtocolRegistry.TryGetCurrentHostLobby()
+                        ?? throw new InvalidOperationException("No active MLB host lobby was found.");
+            var fullPlayers = MlbGameApiCompat.ReadLobbyPlayers(lobby);
             return MlbLobbyPayloadCodec.WriteSnapshot(CreateSnapshot(
                 fullPlayers,
                 fullPlayers.Any(player => player.SlotId >= Const.VanillaPlayerLimit)));
@@ -221,11 +246,62 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             ref byte[] result)
             where T : INetMessage
         {
-            var writer = NetMessageBusWriterField.GetValue(messageBus) as PacketWriter
-                         ?? throw new InvalidOperationException("NetMessageBus has no active packet writer.");
+            var writer = NetMessageBusWriterRef(messageBus);
             RitsuNetMessageTailExtensions.Write(writer, message);
-            length = (int)Math.Ceiling((float)writer.BitPosition / 8f);
+            length = checked((int)(((long)writer.BitPosition + 7) / 8));
             result = writer.Buffer;
+        }
+
+        private sealed class NetMessageBusDeserializePatch : IPatchMethod
+        {
+            public static string PatchId => "mlb_lobby_tail_bus_deserialize";
+            public static string Description =>
+                "Read MLB lobby tails after each complete vanilla message deserialization pipeline";
+
+            public static ModPatchTarget[] GetTargets()
+            {
+                return
+                [
+                    new(
+                        typeof(NetMessageBus),
+                        nameof(NetMessageBus.TryDeserializeMessage),
+                        [typeof(byte[]), typeof(INetMessage).MakeByRefType(), typeof(ulong?).MakeByRefType()]),
+                ];
+            }
+
+            private static void Postfix(NetMessageBus __instance, bool __result, ref INetMessage? message)
+            {
+                if (!__result || message == null)
+                    return;
+
+                switch (message)
+                {
+                    case ClientLobbyJoinRequestMessage:
+                        RitsuNetMessageTailExtensions.Read<ClientLobbyJoinRequestMessage>(GetReader());
+                        break;
+                    case ClientLobbyJoinResponseMessage joinResponse:
+                        RitsuNetMessageTailExtensions.Read<ClientLobbyJoinResponseMessage>(GetReader());
+                        var joinPayload = MlbInboundPayloads.DequeueJoinResponse();
+                        if (joinPayload?.Snapshot?.FullPlayers is { } joinedPlayers)
+                            MlbGameApiCompat.WritePlayers(ref joinResponse, joinedPlayers);
+                        MlbInboundPayloads.EnqueueJoinResponse(joinPayload);
+                        message = joinResponse;
+                        break;
+                    case PlayerJoinedMessage playerJoined:
+                        RitsuNetMessageTailExtensions.Read<PlayerJoinedMessage>(GetReader());
+                        var joinedPayload = MlbInboundPayloads.DequeuePlayerJoined();
+                        if (joinedPayload?.ExtendedPlayer is { } joinedPlayer)
+                            MlbGameApiCompat.WritePlayer(ref playerJoined, joinedPlayer);
+                        MlbInboundPayloads.EnqueuePlayerJoined(joinedPayload);
+                        message = playerJoined;
+                        break;
+                }
+
+                PacketReader GetReader()
+                {
+                    return NetMessageBusReaderRef(__instance);
+                }
+            }
         }
 
         private static bool CanUseVanillaRoster(IReadOnlyList<MlbLobbyPlayerData> players)
@@ -289,7 +365,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 return new(MlbJoinRejectionReason.ExistingIncompatiblePeers, existingBlockers);
 
             var allPeers = players.Select(player => player.Id).Append(senderId).ToArray();
-            if (!state.TryActivate(allPeers, out _, out var incompatiblePeers))
+            if (!state.TryActivate(allPeers, out var incompatiblePeers))
                 return new(MlbJoinRejectionReason.ProtocolMismatch,
                     incompatiblePeers.Length > 0 ? incompatiblePeers : allPeers);
 
@@ -324,23 +400,6 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 ref byte[] __result)
             {
                 FinishMessageTail(__instance, message, ref length, ref __result);
-            }
-        }
-
-        private sealed class ClientLobbyJoinRequestDeserializePatch : IPatchMethod
-        {
-            public static string PatchId => "mlb_join_request_capability_deserialize";
-            public static string Description => "Read MLB capability from the original lobby join request";
-
-            public static ModPatchTarget[] GetTargets()
-            {
-                return [new(typeof(ClientLobbyJoinRequestMessage), nameof(ClientLobbyJoinRequestMessage.Deserialize), [typeof(PacketReader)])];
-            }
-
-            [HarmonyPriority(Priority.Last)]
-            private static void Postfix(PacketReader reader)
-            {
-                RitsuNetMessageTailExtensions.Read<ClientLobbyJoinRequestMessage>(reader);
             }
         }
 
@@ -456,28 +515,6 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
         }
 
-        private sealed class ClientLobbyJoinResponseDeserializePatch : IPatchMethod
-        {
-            public static string PatchId => "mlb_join_response_tail_deserialize";
-            public static string Description => "Restore the MLB lobby snapshot before original join handling";
-
-            public static ModPatchTarget[] GetTargets()
-            {
-                return [new(typeof(ClientLobbyJoinResponseMessage), nameof(ClientLobbyJoinResponseMessage.Deserialize), [typeof(PacketReader)])];
-            }
-
-            [HarmonyPriority(Priority.Last)]
-            private static void Postfix(ref ClientLobbyJoinResponseMessage __instance, PacketReader reader)
-            {
-                RitsuNetMessageTailExtensions.Read<ClientLobbyJoinResponseMessage>(reader);
-                var decoded = MlbInboundPayloads.DequeueJoinResponse();
-                if (decoded?.Snapshot?.FullPlayers is { } fullPlayers)
-                    MlbGameApiCompat.WritePlayers(ref __instance, fullPlayers);
-
-                MlbInboundPayloads.EnqueueJoinResponse(decoded);
-            }
-        }
-
         private sealed class ClientLobbyJoinResponseHandlerPatch : IPatchMethod
         {
             public static string PatchId => "mlb_join_response_tail_handler";
@@ -551,30 +588,6 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
         }
 
-        private sealed class PlayerJoinedDeserializePatch : IPatchMethod
-        {
-            public static string PatchId => "mlb_player_joined_tail_deserialize";
-            public static string Description => "Restore MLB player data before original PlayerJoined handling";
-
-            public static ModPatchTarget[] GetTargets()
-            {
-                return [new(typeof(PlayerJoinedMessage), nameof(PlayerJoinedMessage.Deserialize), [typeof(PacketReader)])];
-            }
-
-            [HarmonyPriority(Priority.Last)]
-            private static void Postfix(ref PlayerJoinedMessage __instance, PacketReader reader)
-            {
-                RitsuNetMessageTailExtensions.Read<PlayerJoinedMessage>(reader);
-                var decoded = MlbInboundPayloads.DequeuePlayerJoined();
-                if (decoded?.ExtendedPlayer is { } player)
-                    MlbGameApiCompat.WritePlayer(ref __instance, player);
-
-                if (MlbGameApiCompat.ReadPlayer(__instance).Id == 0)
-                    throw new InvalidDataException("Extended PlayerJoinedMessage is missing a valid MLB tail.");
-                MlbInboundPayloads.EnqueuePlayerJoined(decoded);
-            }
-        }
-
         private sealed class PlayerJoinedHandlerPatch : IPatchMethod
         {
             public static string PatchId => "mlb_player_joined_tail_handler";
@@ -586,57 +599,30 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                     [typeof(PlayerJoinedMessage), typeof(ulong)])];
             }
 
-            private static void Prefix(StartRunLobby __instance)
+            [HarmonyPriority(Priority.First)]
+            private static bool Prefix(StartRunLobby __instance, PlayerJoinedMessage message)
             {
+                if (MlbGameApiCompat.ReadPlayer(message).Id == 0)
+                {
+                    RejectUnsafeExpandedMessage(__instance);
+                    return false;
+                }
+
                 if (MlbInboundPayloads.DequeuePlayerJoined() is not { } payload)
-                    return;
+                    return true;
                 MlbLobbyProtocolRegistry.GetOrCreate(__instance)
                     .RecordCapability(payload.Capability.PeerId, payload.Capability.Capability);
+                return true;
             }
         }
 
         private static class LobbyBeginRunNetMessageBusPatch
         {
             [HarmonyPriority(Priority.First)]
-            internal static void Prefix(ref LobbyBeginRunMessage message,
-                out PlayerListSerializeState __state)
+            internal static void Prefix(ref LobbyBeginRunMessage message)
             {
                 var fullPlayers = MlbGameApiCompat.ReadPlayers(message);
-                __state = new(fullPlayers);
                 MlbGameApiCompat.WritePlayers(ref message, CreateVanillaProjection(fullPlayers));
-            }
-
-            [HarmonyPriority(Priority.Last)]
-            internal static void Postfix(
-                NetMessageBus __instance,
-                LobbyBeginRunMessage message,
-                ref int length,
-                ref byte[] __result,
-                PlayerListSerializeState __state)
-            {
-                MlbGameApiCompat.WritePlayers(ref message, __state.FullPlayers);
-                FinishMessageTail(__instance, message, ref length, ref __result);
-            }
-        }
-
-        private sealed class LobbyBeginRunDeserializePatch : IPatchMethod
-        {
-            public static string PatchId => "mlb_begin_run_tail_deserialize";
-            public static string Description => "Restore the final MLB player snapshot before original run start handling";
-
-            public static ModPatchTarget[] GetTargets()
-            {
-                return [new(typeof(LobbyBeginRunMessage), nameof(LobbyBeginRunMessage.Deserialize), [typeof(PacketReader)])];
-            }
-
-            [HarmonyPriority(Priority.Last)]
-            private static void Postfix(ref LobbyBeginRunMessage __instance, PacketReader reader)
-            {
-                RitsuNetMessageTailExtensions.Read<LobbyBeginRunMessage>(reader);
-                var snapshot = MlbInboundPayloads.DequeueBeginRun();
-                if (snapshot?.FullPlayers is { } players)
-                    MlbGameApiCompat.WritePlayers(ref __instance, players);
-                MlbInboundPayloads.EnqueueBeginRun(snapshot);
             }
         }
 
@@ -652,20 +638,60 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
 
             [HarmonyPriority(Priority.First)]
-            private static void Prefix(StartRunLobby __instance)
+            private static bool Prefix(StartRunLobby __instance, ref LobbyBeginRunMessage message)
             {
                 var snapshot = MlbInboundPayloads.DequeueBeginRun();
                 var state = MlbLobbyProtocolRegistry.GetOrCreate(__instance);
+                var lobbyPlayers = MlbGameApiCompat.ReadLobbyPlayers(__instance);
                 if (snapshot == null)
                 {
-                    if (state.ExtendedProtocolActive)
-                        throw new InvalidDataException("Expanded lobby begin-run message is missing its MLB tail.");
-                    return;
+                    if (state.ExtendedProtocolActive || lobbyPlayers.Count > Const.VanillaPlayerLimit)
+                    {
+                        RejectUnsafeExpandedMessage(__instance);
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                if (snapshot.FullPlayers is { } fullPlayers)
+                {
+                    if (!HasSameRoster(lobbyPlayers, fullPlayers))
+                    {
+                        RejectUnsafeExpandedMessage(__instance);
+                        return false;
+                    }
+
+                    MlbGameApiCompat.WritePlayers(ref message, fullPlayers);
+                }
+                else if (lobbyPlayers.Count > Const.VanillaPlayerLimit ||
+                         snapshot.Capabilities.Count > Const.VanillaPlayerLimit)
+                {
+                    RejectUnsafeExpandedMessage(__instance);
+                    return false;
                 }
 
                 state.ApplySnapshot(snapshot);
                 RuntimeMultiplayerSettings.ApplyRemoteHostSettings(snapshot.ExtraPlayerScalingMultiplier);
+                return true;
             }
+
+            private static bool HasSameRoster(
+                IReadOnlyList<MlbLobbyPlayerData> lobbyPlayers,
+                IReadOnlyList<MlbLobbyPlayerData> snapshotPlayers)
+            {
+                return lobbyPlayers.Count == snapshotPlayers.Count &&
+                       lobbyPlayers.Select(player => player.Id).ToHashSet()
+                           .SetEquals(snapshotPlayers.Select(player => player.Id));
+            }
+        }
+
+        private static void RejectUnsafeExpandedMessage(StartRunLobby lobby)
+        {
+            MlbLobbyToasts.ShowClientRejection(
+                lobby.NetService,
+                new(MlbJoinRejectionReason.ProtocolMismatch, []));
+            lobby.NetService.Disconnect(NetError.ModMismatch);
         }
 
         private sealed class StartRunLobbyConstructorPatch : IPatchMethod

@@ -96,19 +96,17 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
         public bool TryActivate(
             IEnumerable<ulong> peerIds,
-            out byte selectedProtocol,
             out ulong[] incompatiblePeers)
         {
             var status = GetExpansionStatus(peerIds);
             if (status.Availability == MlbExpansionAvailability.Blocked)
             {
-                selectedProtocol = 0;
                 incompatiblePeers = [.. status.BlockingPeerIds];
                 return false;
             }
 
-            selectedProtocol = status.SelectedProtocol;
             incompatiblePeers = [];
+            var selectedProtocol = status.SelectedProtocol;
             if (ExtendedProtocolActive && SelectedProtocol == selectedProtocol)
                 return true;
 
@@ -126,6 +124,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         private static readonly ConditionalWeakTable<object, CapabilityHolder> RemoteHostCapabilities = new();
         private static readonly Lock Gate = new();
         private static WeakReference<MlbLobbyProtocolState>? _currentHostState;
+        private static WeakReference<StartRunLobby>? _currentHostLobby;
 
         public static MlbLobbyProtocolState GetOrCreate(StartRunLobby lobby)
         {
@@ -138,7 +137,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
             if (lobby.NetService.Type == NetGameType.Host)
                 lock (Gate)
+                {
                     _currentHostState = new(state);
+                    _currentHostLobby = new(lobby);
+                }
 
             if (lobby.NetService.Type == NetGameType.Client &&
                 PendingClientSnapshots.TryGetValue(lobby.NetService, out var holder))
@@ -160,6 +162,12 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         {
             lock (Gate)
                 return _currentHostState != null && _currentHostState.TryGetTarget(out var state) ? state : null;
+        }
+
+        public static StartRunLobby? TryGetCurrentHostLobby()
+        {
+            lock (Gate)
+                return _currentHostLobby != null && _currentHostLobby.TryGetTarget(out var lobby) ? lobby : null;
         }
 
         public static void StageClientSnapshot(INetGameService netService, MlbLobbySnapshot snapshot)
@@ -188,7 +196,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                     if (_currentHostState != null &&
                         _currentHostState.TryGetTarget(out var current) &&
                         ReferenceEquals(current, state))
+                    {
                         _currentHostState = null;
+                        _currentHostLobby = null;
+                    }
             }
 
             States.Remove(lobby);
