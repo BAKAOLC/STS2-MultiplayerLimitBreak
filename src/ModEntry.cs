@@ -51,6 +51,7 @@ namespace STS2MultiplayerLimitBreak
             MerchantRoomLayoutPatches.AddTo(patcher);
             RestSiteRoomLayoutPatches.AddTo(patcher);
             TreasureRoomRelicLayoutPatches.AddTo(patcher);
+            LobbyExpansionStatusPatches.AddTo(patcher);
             RitsuLibFramework.ApplyRequiredPatcher(
                 patcher,
                 DisableMod,

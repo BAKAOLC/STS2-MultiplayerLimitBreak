@@ -106,39 +106,37 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
         private static byte[] WriteJoinResponseExtension(ClientLobbyJoinResponseMessage message)
         {
-            var fullPlayers = message.playersInLobby
-                              ?? throw new InvalidOperationException("Lobby join response has no player list.");
+            var fullPlayers = MlbGameApiCompat.ReadPlayers(message);
             var rejection = MlbOutboundJoinRejection.TryPeek();
             var payload = rejection != null
                 ? new MlbJoinResponsePayload(null, rejection)
                 : new MlbJoinResponsePayload(
                     CreateSnapshot(
                         fullPlayers,
-                        fullPlayers.Any(player => player.slotId >= Const.VanillaPlayerLimit)),
+                        fullPlayers.Any(player => player.SlotId >= Const.VanillaPlayerLimit)),
                     null);
             return MlbLobbyPayloadCodec.WriteJoinResponse(payload);
         }
 
         private static byte[] WritePlayerJoinedExtension(PlayerJoinedMessage message)
         {
-            var player = message.lobbyPlayer;
+            var player = MlbGameApiCompat.ReadPlayer(message);
             var state = MlbLobbyProtocolRegistry.TryGetCurrentHostState();
             return MlbLobbyPayloadCodec.WritePlayerJoined(new(
-                new(player.id, state?.GetCapability(player.id)),
-                player.slotId >= Const.VanillaPlayerLimit ? player : null));
+                new(player.Id, state?.GetCapability(player.Id)),
+                player.SlotId >= Const.VanillaPlayerLimit ? player : null));
         }
 
         private static byte[] WriteBeginRunExtension(LobbyBeginRunMessage message)
         {
-            var fullPlayers = message.playersInLobby
-                              ?? throw new InvalidOperationException("Lobby begin-run message has no player list.");
+            var fullPlayers = MlbGameApiCompat.ReadPlayers(message);
             return MlbLobbyPayloadCodec.WriteSnapshot(CreateSnapshot(
                 fullPlayers,
-                fullPlayers.Any(player => player.slotId >= Const.VanillaPlayerLimit)));
+                fullPlayers.Any(player => player.SlotId >= Const.VanillaPlayerLimit)));
         }
 
         private static MlbLobbySnapshot CreateSnapshot(
-            IReadOnlyList<StartRunLobbyPlayer> players,
+            IReadOnlyList<MlbLobbyPlayerData> players,
             bool includePlayers)
         {
             var state = MlbLobbyProtocolRegistry.TryGetCurrentHostState()
@@ -146,12 +144,41 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             return state.CreateSnapshot(players, includePlayers);
         }
 
-        private static List<StartRunLobbyPlayer> CreateVanillaProjection(
-            IReadOnlyList<StartRunLobbyPlayer> players)
+        private static List<MlbLobbyPlayerData> CreateVanillaProjection(
+            IReadOnlyList<MlbLobbyPlayerData> players)
         {
-            return players.Where(player => player.slotId < Const.VanillaPlayerLimit)
-                .Take(Const.VanillaPlayerLimit)
-                .ToList();
+            var projection = players.Take(Const.VanillaPlayerLimit).ToList();
+            var usedSlots = projection
+                .Where(player => player.SlotId is >= 0 and < Const.VanillaPlayerLimit)
+                .Select(player => player.SlotId)
+                .ToHashSet();
+            var nextFreeSlot = 0;
+
+            for (var index = 0; index < projection.Count; index++)
+            {
+                var player = projection[index];
+                if (player.SlotId is >= 0 and < Const.VanillaPlayerLimit)
+                    continue;
+
+                while (usedSlots.Contains(nextFreeSlot))
+                    nextFreeSlot++;
+                projection[index] = player with { SlotId = nextFreeSlot };
+                usedSlots.Add(nextFreeSlot);
+            }
+
+            return projection;
+        }
+
+        private static bool CanUseVanillaRoster(IReadOnlyList<MlbLobbyPlayerData> players)
+        {
+            return players.Count <= Const.VanillaPlayerLimit &&
+                   players.All(player => player.SlotId is >= 0 and < Const.VanillaPlayerLimit) &&
+                   players.Select(player => player.SlotId).Distinct().Count() == players.Count;
+        }
+
+        private static bool CanRestoreExtendedRoster(MlbPeerCapability? capability)
+        {
+            return capability is { } value && value.Supports(MlbPeerCapability.Local.MaxProtocol);
         }
 
         private static void SendRejection(
@@ -164,12 +191,12 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             {
                 var response = new ClientLobbyJoinResponseMessage
                 {
-                    playersInLobby = lobby.Players,
                     ascension = lobby.Ascension,
                     dailyTime = lobby.DailyTime,
                     seed = lobby.Seed,
                     modifiers = lobby.Modifiers.Select(static modifier => modifier.ToSerializable()).ToList(),
                 };
+                MlbGameApiCompat.WritePlayers(ref response, MlbGameApiCompat.ReadLobbyPlayers(lobby));
                 using (MlbOutboundJoinRejection.Push(rejection))
                     ((INetHostGameService)lobby.NetService).SendMessage(response, senderId);
             }
@@ -178,17 +205,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             MlbLobbyToasts.ShowHostRejection(lobby.NetService, senderId, rejection);
         }
 
-        private static int FindFirstAvailableSlot(IReadOnlyList<StartRunLobbyPlayer> players)
-        {
-            for (var slot = 0; slot < Const.PlayerLimit; slot++)
-                if (players.All(player => player.slotId != slot))
-                    return slot;
-            return Const.PlayerLimit;
-        }
-
         private static MlbJoinRejection? ValidateExpansion(
             MlbLobbyProtocolState state,
-            IReadOnlyList<StartRunLobbyPlayer> players,
+            IReadOnlyList<MlbLobbyPlayerData> players,
             ulong senderId,
             MlbPeerCapability? requesterCapability)
         {
@@ -203,14 +222,14 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 return new(MlbJoinRejectionReason.ProtocolMismatch, [senderId]);
 
             var existingBlockers = players
-                .Where(player => state.GetCapability(player.id) is not { } capability ||
+                .Where(player => state.GetCapability(player.Id) is not { } capability ||
                                  !capability.Supports(MlbPeerCapability.Local.MaxProtocol))
-                .Select(player => player.id)
+                .Select(player => player.Id)
                 .ToArray();
             if (existingBlockers.Length > 0)
                 return new(MlbJoinRejectionReason.ExistingIncompatiblePeers, existingBlockers);
 
-            var allPeers = players.Select(player => player.id).Append(senderId).ToArray();
+            var allPeers = players.Select(player => player.Id).Append(senderId).ToArray();
             if (!state.TryActivate(allPeers, out _, out var incompatiblePeers))
                 return new(MlbJoinRejectionReason.ProtocolMismatch,
                     incompatiblePeers.Length > 0 ? incompatiblePeers : allPeers);
@@ -231,7 +250,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             private static void Prefix(JoinFlow __instance)
             {
                 MlbLobbyProtocolRegistry.SetRemoteHostCapability(
-                    __instance.NetService,
+                    MlbGameApiCompat.GetNetService(__instance),
                     MlbInboundPayloads.DequeueInitialCapability());
             }
         }
@@ -294,14 +313,26 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 var capability = MlbInboundPayloads.DequeueJoinCapability();
                 state.RecordCapability(senderId, capability);
 
-                var nextSlot = FindFirstAvailableSlot(__instance.Players);
-                var requiresExpansion = state.ExtendedProtocolActive ||
-                                        nextSlot >= Const.VanillaPlayerLimit ||
-                                        __instance.Players.Any(player => player.slotId >= Const.VanillaPlayerLimit);
+                var players = MlbGameApiCompat.ReadLobbyPlayers(__instance);
+                var requiresExpansion = players.Count >= Const.VanillaPlayerLimit;
                 if (!requiresExpansion)
-                    return true;
+                {
+                    if (CanUseVanillaRoster(players) || CanRestoreExtendedRoster(capability))
+                        return true;
 
-                var rejection = ValidateExpansion(state, __instance.Players, senderId, capability);
+                    var highSlotPlayers = players
+                        .Where(player => player.SlotId is < 0 or >= Const.VanillaPlayerLimit)
+                        .Select(player => player.Id)
+                        .ToArray();
+                    SendRejection(
+                        __instance,
+                        senderId,
+                        new(MlbJoinRejectionReason.UnsafeVanillaRoster, highSlotPlayers),
+                        capability != null);
+                    return false;
+                }
+
+                var rejection = ValidateExpansion(state, players, senderId, capability);
                 if (rejection == null)
                     return true;
 
@@ -312,7 +343,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             private static void Postfix(StartRunLobby __instance, ulong senderId)
             {
                 if (__instance.NetService.Type != NetGameType.Host ||
-                    __instance.Players.All(player => player.id != senderId))
+                    MlbGameApiCompat.ReadLobbyPlayers(__instance).All(player => player.Id != senderId))
                     return;
 
                 var state = MlbLobbyProtocolRegistry.GetOrCreate(__instance);
@@ -344,7 +375,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
         }
 
-        private readonly record struct PlayerListSerializeState(List<StartRunLobbyPlayer> FullPlayers);
+        private readonly record struct PlayerListSerializeState(List<MlbLobbyPlayerData> FullPlayers);
 
         private sealed class ClientLobbyJoinResponseSerializePatch : IPatchMethod
         {
@@ -360,10 +391,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             private static void Prefix(ref ClientLobbyJoinResponseMessage __instance,
                 out PlayerListSerializeState __state)
             {
-                var fullPlayers = __instance.playersInLobby?.ToList()
-                                  ?? throw new InvalidOperationException("Lobby join response has no player list.");
+                var fullPlayers = MlbGameApiCompat.ReadPlayers(__instance);
                 __state = new(fullPlayers);
-                __instance.playersInLobby = CreateVanillaProjection(fullPlayers);
+                MlbGameApiCompat.WritePlayers(ref __instance, CreateVanillaProjection(fullPlayers));
             }
 
             [HarmonyPriority(Priority.Last)]
@@ -371,7 +401,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 PacketWriter writer,
                 PlayerListSerializeState __state)
             {
-                __instance.playersInLobby = __state.FullPlayers;
+                MlbGameApiCompat.WritePlayers(ref __instance, __state.FullPlayers);
                 RitsuNetMessageTailExtensions.Write(writer, __instance);
             }
         }
@@ -392,7 +422,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 RitsuNetMessageTailExtensions.Read<ClientLobbyJoinResponseMessage>(reader);
                 var decoded = MlbInboundPayloads.DequeueJoinResponse();
                 if (decoded?.Snapshot?.FullPlayers is { } fullPlayers)
-                    __instance.playersInLobby = fullPlayers.ToList();
+                    MlbGameApiCompat.WritePlayers(ref __instance, fullPlayers);
 
                 MlbInboundPayloads.EnqueueJoinResponse(decoded);
             }
@@ -412,26 +442,27 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             [HarmonyPriority(Priority.First)]
             private static bool Prefix(JoinFlow __instance)
             {
+                var netService = MlbGameApiCompat.GetNetService(__instance);
                 var payload = MlbInboundPayloads.DequeueJoinResponse();
                 if (payload?.Rejection is { } rejection)
                 {
-                    MlbLobbyToasts.ShowClientRejection(__instance.NetService, rejection);
-                    __instance.NetService.Disconnect(NetError.ModMismatch);
+                    MlbLobbyToasts.ShowClientRejection(netService, rejection);
+                    netService.Disconnect(NetError.ModMismatch);
                     return false;
                 }
 
                 if (payload?.Snapshot is { } snapshot)
                 {
-                    MlbLobbyProtocolRegistry.StageClientSnapshot(__instance.NetService, snapshot);
+                    MlbLobbyProtocolRegistry.StageClientSnapshot(netService, snapshot);
                     return true;
                 }
 
-                if (MlbLobbyProtocolRegistry.GetRemoteHostCapability(__instance.NetService) != null)
+                if (MlbLobbyProtocolRegistry.GetRemoteHostCapability(netService) != null)
                 {
                     MlbLobbyToasts.ShowClientRejection(
-                        __instance.NetService,
+                        netService,
                         new(MlbJoinRejectionReason.ProtocolMismatch, []));
-                    __instance.NetService.Disconnect(NetError.ModMismatch);
+                    netService.Disconnect(NetError.ModMismatch);
                     return false;
                 }
 
@@ -439,7 +470,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
         }
 
-        private readonly record struct PlayerJoinedSerializeState(StartRunLobbyPlayer FullPlayer, bool Extended);
+        private readonly record struct PlayerJoinedSerializeState(MlbLobbyPlayerData FullPlayer, bool Extended);
 
         private sealed class PlayerJoinedSerializePatch : IPatchMethod
         {
@@ -454,16 +485,14 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             [HarmonyPriority(Priority.First)]
             private static void Prefix(ref PlayerJoinedMessage __instance, out PlayerJoinedSerializeState __state)
             {
-                var fullPlayer = __instance.lobbyPlayer;
-                var extended = fullPlayer.slotId >= Const.VanillaPlayerLimit;
+                var fullPlayer = MlbGameApiCompat.ReadPlayer(__instance);
+                var extended = fullPlayer.SlotId >= Const.VanillaPlayerLimit;
                 __state = new(fullPlayer, extended);
                 if (!extended)
                     return;
 
-                var placeholder = fullPlayer;
-                placeholder.id = 0;
-                placeholder.slotId = 0;
-                __instance.lobbyPlayer = placeholder;
+                var placeholder = fullPlayer with { Id = 0, SlotId = 0 };
+                MlbGameApiCompat.WritePlayer(ref __instance, placeholder);
             }
 
             [HarmonyPriority(Priority.Last)]
@@ -471,7 +500,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 PacketWriter writer,
                 PlayerJoinedSerializeState __state)
             {
-                __instance.lobbyPlayer = __state.FullPlayer;
+                MlbGameApiCompat.WritePlayer(ref __instance, __state.FullPlayer);
                 RitsuNetMessageTailExtensions.Write(writer, __instance);
             }
         }
@@ -492,9 +521,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 RitsuNetMessageTailExtensions.Read<PlayerJoinedMessage>(reader);
                 var decoded = MlbInboundPayloads.DequeuePlayerJoined();
                 if (decoded?.ExtendedPlayer is { } player)
-                    __instance.lobbyPlayer = player;
+                    MlbGameApiCompat.WritePlayer(ref __instance, player);
 
-                if (__instance.lobbyPlayer.id == 0)
+                if (MlbGameApiCompat.ReadPlayer(__instance).Id == 0)
                     throw new InvalidDataException("Extended PlayerJoinedMessage is missing a valid MLB tail.");
                 MlbInboundPayloads.EnqueuePlayerJoined(decoded);
             }
@@ -534,10 +563,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             private static void Prefix(ref LobbyBeginRunMessage __instance,
                 out PlayerListSerializeState __state)
             {
-                var fullPlayers = __instance.playersInLobby?.ToList()
-                                  ?? throw new InvalidOperationException("Lobby begin-run message has no player list.");
+                var fullPlayers = MlbGameApiCompat.ReadPlayers(__instance);
                 __state = new(fullPlayers);
-                __instance.playersInLobby = CreateVanillaProjection(fullPlayers);
+                MlbGameApiCompat.WritePlayers(ref __instance, CreateVanillaProjection(fullPlayers));
             }
 
             [HarmonyPriority(Priority.Last)]
@@ -545,7 +573,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 PacketWriter writer,
                 PlayerListSerializeState __state)
             {
-                __instance.playersInLobby = __state.FullPlayers;
+                MlbGameApiCompat.WritePlayers(ref __instance, __state.FullPlayers);
                 RitsuNetMessageTailExtensions.Write(writer, __instance);
             }
         }
@@ -566,7 +594,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 RitsuNetMessageTailExtensions.Read<LobbyBeginRunMessage>(reader);
                 var snapshot = MlbInboundPayloads.DequeueBeginRun();
                 if (snapshot?.FullPlayers is { } players)
-                    __instance.playersInLobby = players.ToList();
+                    MlbGameApiCompat.WritePlayers(ref __instance, players);
                 MlbInboundPayloads.EnqueueBeginRun(snapshot);
             }
         }
@@ -659,13 +687,20 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 if (!MlbLobbyProtocolRegistry.TryGet(__instance, out var state))
                     return;
 
-                var wasAccepted = __instance.Players.Any(player => player.id == playerId);
+                var players = MlbGameApiCompat.ReadLobbyPlayers(__instance);
+                var wasAccepted = players.Any(player => player.Id == playerId);
                 var hadUnsupported = wasAccepted && state.GetCapability(playerId) == null;
+                var remainingPlayers = players.Where(player => player.Id != playerId).ToArray();
+                var restoredVanillaAdmission = wasAccepted &&
+                                               !CanUseVanillaRoster(players) &&
+                                               remainingPlayers.Length < Const.VanillaPlayerLimit &&
+                                               CanUseVanillaRoster(remainingPlayers);
                 state.RemovePeer(playerId);
                 if (hadUnsupported &&
-                    __instance.Players.Where(player => player.id != playerId)
-                        .All(player => state.GetCapability(player.id) != null))
+                    remainingPlayers.All(player => state.GetCapability(player.Id) != null))
                     MlbLobbyToasts.ShowExpansionAvailable(__instance.NetService);
+                if (restoredVanillaAdmission)
+                    MlbLobbyToasts.ShowVanillaAdmissionRestored(__instance.NetService);
             }
         }
     }

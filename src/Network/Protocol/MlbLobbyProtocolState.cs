@@ -9,18 +9,25 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
     {
         private readonly Dictionary<ulong, MlbPeerCapability?> _capabilities = [];
 
+        public event Action? Changed;
+
         public bool ExtendedProtocolActive { get; private set; }
 
         public byte SelectedProtocol { get; private set; }
 
         public void RecordCapability(ulong peerId, MlbPeerCapability? capability)
         {
+            if (_capabilities.TryGetValue(peerId, out var existing) && existing == capability)
+                return;
+
             _capabilities[peerId] = capability;
+            Changed?.Invoke();
         }
 
         public void RemovePeer(ulong peerId)
         {
-            _capabilities.Remove(peerId);
+            if (_capabilities.Remove(peerId))
+                Changed?.Invoke();
         }
 
         public MlbPeerCapability? GetCapability(ulong peerId)
@@ -35,14 +42,49 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 _capabilities[entry.PeerId] = entry.Capability;
             ExtendedProtocolActive = snapshot.ExtendedProtocolActive;
             SelectedProtocol = snapshot.SelectedProtocol;
+            Changed?.Invoke();
+        }
+
+        public MlbExpansionStatus GetExpansionStatus(IEnumerable<ulong> peerIds)
+        {
+            var distinctPeerIds = peerIds.Distinct().ToArray();
+            if (ExtendedProtocolActive && distinctPeerIds.Length > Const.VanillaPlayerLimit)
+                return new(MlbExpansionAvailability.Active, SelectedProtocol, []);
+
+            var bestProtocol = MlbPeerCapability.Local.MaxProtocol;
+            ulong[]? bestBlockers = null;
+
+            for (var protocol = MlbPeerCapability.Local.MinProtocol;
+                 protocol <= MlbPeerCapability.Local.MaxProtocol;
+                 protocol++)
+            {
+                var blockers = distinctPeerIds
+                    .Where(peerId => GetCapability(peerId) is not { } capability ||
+                                     !capability.Supports(protocol))
+                    .ToArray();
+                if (bestBlockers == null || blockers.Length < bestBlockers.Length ||
+                    blockers.Length == bestBlockers.Length && protocol > bestProtocol)
+                {
+                    bestProtocol = protocol;
+                    bestBlockers = blockers;
+                }
+
+                if (protocol == byte.MaxValue)
+                    break;
+            }
+
+            bestBlockers ??= distinctPeerIds;
+            return bestBlockers.Length == 0
+                ? new(MlbExpansionAvailability.Available, bestProtocol, [])
+                : new(MlbExpansionAvailability.Blocked, 0, bestBlockers);
         }
 
         public MlbLobbySnapshot CreateSnapshot(
-            IReadOnlyList<MegaCrit.Sts2.Core.Entities.Multiplayer.StartRunLobbyPlayer> players,
+            IReadOnlyList<MlbLobbyPlayerData> players,
             bool includePlayers)
         {
             var entries = players
-                .Select(player => new MlbPeerCapabilityEntry(player.id, GetCapability(player.id)))
+                .Select(player => new MlbPeerCapabilityEntry(player.Id, GetCapability(player.Id)))
                 .ToList();
             return new(
                 ExtendedProtocolActive,
@@ -57,37 +99,22 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             out byte selectedProtocol,
             out ulong[] incompatiblePeers)
         {
-            var min = MlbPeerCapability.Local.MinProtocol;
-            var max = MlbPeerCapability.Local.MaxProtocol;
-            var incompatible = new List<ulong>();
-
-            foreach (var peerId in peerIds.Distinct())
+            var status = GetExpansionStatus(peerIds);
+            if (status.Availability == MlbExpansionAvailability.Blocked)
             {
-                if (!_capabilities.TryGetValue(peerId, out var capability) || capability == null)
-                {
-                    incompatible.Add(peerId);
-                    continue;
-                }
-
-                min = Math.Max(min, capability.Value.MinProtocol);
-                max = Math.Min(max, capability.Value.MaxProtocol);
-            }
-
-            if (incompatible.Count > 0 || min > max)
-            {
-                if (incompatible.Count == 0)
-                    incompatible.AddRange(peerIds.Where(peerId =>
-                        GetCapability(peerId) is not { } capability ||
-                        !capability.Supports(MlbPeerCapability.Local.MaxProtocol)));
                 selectedProtocol = 0;
-                incompatiblePeers = [.. incompatible.Distinct()];
+                incompatiblePeers = [.. status.BlockingPeerIds];
                 return false;
             }
 
-            selectedProtocol = (byte)max;
+            selectedProtocol = status.SelectedProtocol;
             incompatiblePeers = [];
+            if (ExtendedProtocolActive && SelectedProtocol == selectedProtocol)
+                return true;
+
             ExtendedProtocolActive = true;
             SelectedProtocol = selectedProtocol;
+            Changed?.Invoke();
             return true;
         }
     }

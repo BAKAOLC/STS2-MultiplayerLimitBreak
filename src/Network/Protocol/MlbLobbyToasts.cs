@@ -52,6 +52,17 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 return;
             }
 
+            if (rejection.Reason == MlbJoinRejectionReason.UnsafeVanillaRoster)
+            {
+                ShowWarning(
+                    Format("toast.unsafeVanillaRosterRejected.body",
+                        "The room still contains players in expanded slots: {0}. {1}'s join was rejected because their client cannot safely reconstruct this lobby state.",
+                        blockerNames.Length > 0 ? string.Join(", ", blockerNames) : "unknown players",
+                        joiningName),
+                    Text("toast.unsafeVanillaRosterRejected.title", "Unsafe original-client join rejected"));
+                return;
+            }
+
             var bodyKey = rejection.Reason == MlbJoinRejectionReason.ProtocolMismatch
                 ? "toast.protocolMismatchRejected.body"
                 : "toast.unsupportedRejected.body";
@@ -79,6 +90,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 MlbJoinRejectionReason.ProtocolMismatch =>
                     Text("toast.clientProtocolMismatch.body",
                         "Your multiplayer extension protocol is incompatible with this room. The host rejected your join."),
+                MlbJoinRejectionReason.UnsafeVanillaRoster =>
+                    Format("toast.clientUnsafeVanillaRoster.body",
+                        "This room still contains players in expanded slots: {0}. Your client cannot safely reconstruct the current lobby state, so the host rejected your join.",
+                        blockerNames.Length > 0 ? string.Join(", ", blockerNames) : "unknown players"),
                 _ => Text("toast.clientUnsupported.body",
                     "This room requires a supported multiplayer extension protocol. The host rejected your join."),
             };
@@ -95,6 +110,17 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 Text("toast.expansionAvailable.body",
                     "All remaining players support multiplayer expansion. The room can now safely hold up to 16 players."),
                 Text("toast.expansionAvailable.title", "Room can now expand"));
+        }
+
+        public static void ShowVanillaAdmissionRestored(INetGameService netService)
+        {
+            if (netService.Type != NetGameType.Host || !ShouldShow("vanilla_admission_restored"))
+                return;
+
+            RitsuToastService.ShowInfo(
+                Text("toast.vanillaAdmissionRestored.body",
+                    "No players remain in expanded slots. Original clients can now safely join while the room has fewer than 4 players."),
+                Text("toast.vanillaAdmissionRestored.title", "Original-client joining restored"));
         }
 
         public static void ClearSession()
@@ -115,7 +141,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
         }
 
-        private static string GetPlayerName(INetGameService netService, ulong peerId)
+        internal static string GetPlayerName(INetGameService netService, ulong peerId)
         {
             try
             {

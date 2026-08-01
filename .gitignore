@@ -2,5 +2,6 @@
 .idea/
 bin/
 obj/
+/artifacts/
 local.props
 *.DotSettings.user
