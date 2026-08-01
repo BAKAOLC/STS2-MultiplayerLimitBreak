@@ -71,11 +71,15 @@ namespace STS2MultiplayerLimitBreak.Layout
         private const string NodeName = "MlbExpansionStatus";
         private static readonly ConditionalWeakTable<NRemoteLobbyPlayer, MlbLobbyBlockerMarker> PlayerMarkers = new();
 
-        private readonly Label _label = new()
+        private readonly MegaLabel _label = new()
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
+            SizeFlagsHorizontal = SizeFlags.Fill,
+            SizeFlagsVertical = SizeFlags.Fill,
             MouseFilter = MouseFilterEnum.Stop,
+            MinFontSize = 12,
+            MaxFontSize = 22,
         };
 
         private NRemoteLobbyPlayerContainer? _playerContainer;
@@ -106,7 +110,7 @@ namespace STS2MultiplayerLimitBreak.Layout
                     OffsetLeft = 4f,
                     OffsetTop = -42f,
                     OffsetRight = -4f,
-                    OffsetBottom = -8f,
+                    OffsetBottom = -6f,
                 };
                 container.AddChildSafely(panel);
             }
@@ -122,7 +126,7 @@ namespace STS2MultiplayerLimitBreak.Layout
         public override void _Ready()
         {
             AddThemeStyleboxOverride("panel", CreatePanelStyle(new(0.18f, 0.58f, 0.38f, 1f)));
-            _label.AddThemeFontSizeOverride("font_size", 15);
+            ApplyResolvedGameFont();
             _label.AddThemeColorOverride("font_color", new(0.95f, 0.97f, 0.94f, 1f));
             this.AddChildSafely(_label);
             RefreshSafely();
@@ -192,7 +196,7 @@ namespace STS2MultiplayerLimitBreak.Layout
                 .Select(player => MlbLobbyToasts.GetPlayerName(_lobby.NetService, player.Id))
                 .ToArray();
 
-            _label.Text = status.Availability switch
+            _label.SetTextAutoSize(status.Availability switch
             {
                 MlbExpansionAvailability.Active => Format(
                     "lobbyStatus.active",
@@ -209,7 +213,7 @@ namespace STS2MultiplayerLimitBreak.Layout
                     "[Multiplayer Limit Break] Active ({0}/{1})",
                     players.Count,
                     Const.PlayerLimit),
-            };
+            });
 
             TooltipText = status.Availability == MlbExpansionAvailability.Blocked
                 ? Format(
@@ -231,6 +235,23 @@ namespace STS2MultiplayerLimitBreak.Layout
             };
             AddThemeStyleboxOverride("panel", CreatePanelStyle(accent));
             UpdatePlayerMarkers(blockerIds);
+        }
+
+        private void ApplyResolvedGameFont()
+        {
+            var sourceLabel = GetParent()?.GetNodeOrNull<MegaLabel>("%SoloLabel")
+                              ?? throw new InvalidOperationException(
+                                  "The original lobby SoloLabel was not found for game-font resolution.");
+            _label.AddThemeFontOverride("font", sourceLabel.GetThemeFont("font", "Label"));
+            _label.AddThemeColorOverride(
+                "font_shadow_color",
+                sourceLabel.GetThemeColor("font_shadow_color", "Label"));
+            _label.AddThemeConstantOverride(
+                "shadow_offset_x",
+                sourceLabel.GetThemeConstant("shadow_offset_x", "Label"));
+            _label.AddThemeConstantOverride(
+                "shadow_offset_y",
+                sourceLabel.GetThemeConstant("shadow_offset_y", "Label"));
         }
 
         private void UpdatePlayerMarkers(IReadOnlySet<ulong> blockerIds)
@@ -302,9 +323,9 @@ namespace STS2MultiplayerLimitBreak.Layout
                 CornerRadiusTopRight = 7,
                 CornerRadiusBottomRight = 7,
                 CornerRadiusBottomLeft = 7,
-                ContentMarginLeft = 10f,
+                ContentMarginLeft = 6f,
                 ContentMarginTop = 4f,
-                ContentMarginRight = 10f,
+                ContentMarginRight = 6f,
                 ContentMarginBottom = 4f,
             };
         }

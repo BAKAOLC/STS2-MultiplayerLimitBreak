@@ -41,8 +41,17 @@ namespace STS2MultiplayerLimitBreak
                 patcher,
                 DisableMod,
                 "Required multiplayer limit patches failed. STS2-MultiplayerLimitBreak will be disabled.");
-            if (IsActive)
-                MlbProtocolPatches.InitializeExtensions();
+            if (!IsActive) return;
+
+            if (!MlbProtocolPatches.ApplyDynamicPatches(patcher))
+            {
+                Log.Error(
+                    "Required MLB message-tail serialization patches failed. STS2-MultiplayerLimitBreak will be disabled.");
+                DisableMod();
+                return;
+            }
+
+            MlbProtocolPatches.InitializeExtensions();
         }
 
         private static void ApplyLayoutPatches()
