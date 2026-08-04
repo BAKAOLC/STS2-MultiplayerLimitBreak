@@ -43,6 +43,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             patcher.RegisterPatch<OtherLobbyJoinRequestHandlerPatch>();
             patcher.RegisterPatch<ClientLobbyJoinResponseHandlerPatch>();
             patcher.RegisterPatch<PlayerJoinedHandlerPatch>();
+            patcher.RegisterPatch<ClientPlayerLeftHandlerPatch>();
             patcher.RegisterPatch<LobbyBeginRunHandlerPatch>();
             patcher.RegisterPatch<StartRunLobbyConstructorPatch>();
             patcher.RegisterPatch<StartRunLobbyCleanUpPatch>();
@@ -610,9 +611,37 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
                 if (MlbInboundPayloads.DequeuePlayerJoined() is not { } payload)
                     return true;
-                MlbLobbyProtocolRegistry.GetOrCreate(__instance)
-                    .RecordCapability(payload.Capability.PeerId, payload.Capability.Capability);
+                var state = MlbLobbyProtocolRegistry.GetOrCreate(__instance);
+                state.RecordCapability(payload.Capability.PeerId, payload.Capability.Capability);
+                if (payload.ExtendedPlayer == null)
+                    return true;
+
+                var peerIds = MlbGameApiCompat.ReadLobbyPlayers(__instance)
+                    .Select(static player => player.Id)
+                    .Append(payload.Capability.PeerId);
+                state.TryActivate(peerIds, out _);
                 return true;
+            }
+        }
+
+        private sealed class ClientPlayerLeftHandlerPatch : IPatchMethod
+        {
+            public static string PatchId => "mlb_lobby_protocol_client_peer_cleanup";
+            public static string Description => "Remove departed peers from the client MLB capability roster";
+
+            public static ModPatchTarget[] GetTargets()
+            {
+                return [new(typeof(StartRunLobby), "HandlePlayerLeftMessage",
+                    [typeof(PlayerLeftMessage), typeof(ulong)])];
+            }
+
+            private static void Postfix(StartRunLobby __instance, PlayerLeftMessage message)
+            {
+                if (__instance.NetService.Type != NetGameType.Client ||
+                    !MlbLobbyProtocolRegistry.TryGet(__instance, out var state))
+                    return;
+
+                state.RemovePeer(message.playerId);
             }
         }
 

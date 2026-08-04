@@ -16,7 +16,7 @@
 
 ## 依赖
 
-- [STS2-RitsuLib](https://github.com/BAKAOLC/sts-2-ritsulib) 0.5.3 或更高版本
+- [STS2-RitsuLib](https://github.com/BAKAOLC/sts-2-ritsulib) 0.5.4 或更高版本
 
 ## Reference
 
@@ -34,6 +34,6 @@ The same DLL supports both the `LobbyPlayer` API used by game 0.107.1 and the `S
 
 A persistent Multiplayer Limit Break indicator above the lobby player list reports Active or Disabled by incompatible clients together with the current player count and applicable limit. After five-player expansion activates, the text stays unchanged and the indicator changes from green to blue. Affected players receive a small amber warning triangle beside the nameplate without touching the vanilla ready or disconnected indicators.
 
-Requires [STS2-RitsuLib](https://github.com/BAKAOLC/sts-2-ritsulib) 0.5.3 or later.
+Requires [STS2-RitsuLib](https://github.com/BAKAOLC/sts-2-ritsulib) 0.5.4 or later.
 
 The basic idea for this project comes from [Rain156/sts2-RMP-Mods](https://github.com/Rain156/sts2-RMP-Mods).

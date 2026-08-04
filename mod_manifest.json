@@ -3,14 +3,14 @@
   "name": "Multiplayer Limit Break",
   "author": "OLC",
   "description": "Expands multiplayer to 16 players with automatic capability validation, a versioned synchronized transport, extended room layouts, and configurable extra-player scaling.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true,
   "dependencies": [
     {
       "id": "STS2-RitsuLib",
-      "min_version": "0.5.3"
+      "min_version": "0.5.4"
     }
   ],
   "min_game_version": "0.107.1"
