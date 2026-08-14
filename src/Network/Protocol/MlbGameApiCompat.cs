@@ -17,6 +17,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         SerializableUnlockState UnlockState,
         int MaxMultiplayerAscensionUnlocked,
         object? VersionInfo,
+        bool IsModded,
         bool IsReady);
 
     internal static class MlbGameApiCompat
@@ -38,6 +39,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         private static readonly FieldInfo PlayerMaxAscensionField =
             RequirePlayerField("maxMultiplayerAscensionUnlocked");
         private static readonly FieldInfo? PlayerVersionInfoField = AccessTools.Field(PlayerType, "versionInfo");
+        private static readonly FieldInfo? PlayerIsModdedField = AccessTools.Field(PlayerType, "isModded");
         private static readonly FieldInfo PlayerReadyField = RequirePlayerField("isReady");
 
         private static readonly PropertyInfo LobbyPlayersProperty =
@@ -112,6 +114,12 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             versionInfo.Serialize(writer);
         }
 
+        public static void WriteIsModded(PacketWriter writer, MlbLobbyPlayerData player)
+        {
+            if (PlayerIsModdedField != null)
+                writer.WriteBool(player.IsModded);
+        }
+
         public static object? ReadVersionInfo(PacketReader reader)
         {
             if (PlayerVersionInfoField == null)
@@ -120,6 +128,15 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 throw new InvalidDataException("Lobby player version information is not packet serializable.");
             versionInfo.Deserialize(reader);
             return versionInfo;
+        }
+
+        public static bool ReadIsModded(PacketReader reader, object? versionInfo)
+        {
+            if (PlayerIsModdedField != null)
+                return reader.ReadBool();
+
+            return versionInfo != null &&
+                   AccessTools.Method(versionInfo.GetType(), "IsModded")?.Invoke(versionInfo, null) is true;
         }
 
         private static List<MlbLobbyPlayerData> ReadPlayerList(object? rawPlayers)
@@ -146,6 +163,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 (SerializableUnlockState)PlayerUnlockStateField.GetValue(player)!,
                 (int)PlayerMaxAscensionField.GetValue(player)!,
                 PlayerVersionInfoField?.GetValue(player),
+                PlayerIsModdedField?.GetValue(player) as bool? ?? false,
                 (bool)PlayerReadyField.GetValue(player)!);
         }
 
@@ -162,6 +180,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 PlayerVersionInfoField.SetValue(
                     player,
                     data.VersionInfo ?? Activator.CreateInstance(PlayerVersionInfoField.FieldType));
+            PlayerIsModdedField?.SetValue(player, data.IsModded);
             PlayerReadyField.SetValue(player, data.IsReady);
             return player;
         }

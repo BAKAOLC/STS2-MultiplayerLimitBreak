@@ -11,8 +11,10 @@ namespace STS2MultiplayerLimitBreak.Network
 {
     internal static class MultiplayerLimitPatches
     {
-        private static readonly FieldInfo? MaxPlayersField =
-            AccessTools.Field(typeof(StartRunLobby), "<MaxPlayers>k__BackingField");
+        private static readonly FieldInfo MaxPlayersField =
+            AccessTools.Field(typeof(StartRunLobby), "_maxPlayers")
+            ?? AccessTools.Field(typeof(StartRunLobby), "<MaxPlayers>k__BackingField")
+            ?? throw new MissingFieldException(typeof(StartRunLobby).FullName, "MaxPlayers");
 
         public static void AddTo(ModPatcher patcher)
         {
@@ -31,7 +33,8 @@ namespace STS2MultiplayerLimitBreak.Network
 
             RuntimeMultiplayerSettings.PublishHostSettings(lobby.NetService, "lobby_limit");
 
-            if (lobby.MaxPlayers != Const.PlayerLimit) MaxPlayersField?.SetValue(lobby, Const.PlayerLimit);
+            if ((int)MaxPlayersField.GetValue(lobby)! != Const.PlayerLimit)
+                MaxPlayersField.SetValue(lobby, Const.PlayerLimit);
 
             SteamLobbyMemberLimit.TryUpdate(lobby.NetService, Const.PlayerLimit);
         }

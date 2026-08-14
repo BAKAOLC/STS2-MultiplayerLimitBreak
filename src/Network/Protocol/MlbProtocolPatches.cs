@@ -23,8 +23,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 {
     internal static class MlbProtocolPatches
     {
-        private static readonly FieldInfo? MaxPlayersField =
-            AccessTools.Field(typeof(StartRunLobby), "<MaxPlayers>k__BackingField");
+        private static readonly FieldInfo MaxPlayersField =
+            AccessTools.Field(typeof(StartRunLobby), "_maxPlayers")
+            ?? AccessTools.Field(typeof(StartRunLobby), "<MaxPlayers>k__BackingField")
+            ?? throw new MissingFieldException(typeof(StartRunLobby).FullName, "MaxPlayers");
         private static readonly AccessTools.FieldRef<NetMessageBus, PacketWriter> NetMessageBusWriterRef =
             AccessTools.FieldRefAccess<NetMessageBus, PacketWriter>("_writer");
         private static readonly AccessTools.FieldRef<NetMessageBus, PacketReader> NetMessageBusReaderRef =
@@ -421,8 +423,8 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 if (__instance.NetService.Type != NetGameType.Host)
                     return true;
 
-                if (__instance.MaxPlayers != Const.PlayerLimit)
-                    MaxPlayersField?.SetValue(__instance, Const.PlayerLimit);
+                if ((int)MaxPlayersField.GetValue(__instance)! != Const.PlayerLimit)
+                    MaxPlayersField.SetValue(__instance, Const.PlayerLimit);
 
                 var state = MlbLobbyProtocolRegistry.GetOrCreate(__instance);
                 var capability = MlbInboundPayloads.DequeueJoinCapability();

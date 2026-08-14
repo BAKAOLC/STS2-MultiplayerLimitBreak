@@ -233,6 +233,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             writer.Write(player.UnlockState);
             writer.WriteInt(player.MaxMultiplayerAscensionUnlocked);
             MlbGameApiCompat.WriteVersionInfo(writer, player);
+            MlbGameApiCompat.WriteIsModded(writer, player);
             writer.WriteBool(player.IsReady);
         }
 
@@ -244,8 +245,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             var unlockState = reader.Read<MegaCrit.Sts2.Core.Unlocks.SerializableUnlockState>();
             var maxAscension = reader.ReadInt();
             var versionInfo = MlbGameApiCompat.ReadVersionInfo(reader);
+            var isModded = MlbGameApiCompat.ReadIsModded(reader, versionInfo);
             var isReady = reader.ReadBool();
-            return new(id, slotId, character, unlockState, maxAscension, versionInfo, isReady);
+            return new(id, slotId, character, unlockState, maxAscension, versionInfo, isModded, isReady);
         }
 
         private static byte[] Write(Action<PacketWriter> write)
