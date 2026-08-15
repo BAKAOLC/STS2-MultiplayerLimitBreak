@@ -101,6 +101,17 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             ShowWarning(body, Text("toast.clientRejected.title", "Unable to join expanded room"));
         }
 
+        public static void ShowUnsafeExpandedMessage()
+        {
+            if (!ShouldShow("unsafe_expanded_message"))
+                return;
+
+            ShowWarning(
+                Text("toast.unsafeExpandedMessage.body",
+                    "The expanded lobby state received from the host was incomplete or invalid. Rejoin the lobby and make sure every player uses a compatible Multiplayer Limit Break version."),
+                Text("toast.unsafeExpandedMessage.title", "Unable to synchronize expanded room"));
+        }
+
         public static void ShowExpansionAvailable(INetGameService netService)
         {
             if (netService.Type != NetGameType.Host || !ShouldShow("expansion_available"))

@@ -19,6 +19,8 @@
   "toast.clientUnsafeVanillaRoster.body": "This room still contains players in expanded slots: {0}. Your client cannot safely reconstruct the current lobby state, so the host rejected your join.",
   "toast.clientUnsupported.body": "This room requires a supported multiplayer extension protocol. The host rejected your join.",
   "toast.clientRejected.title": "Unable to join expanded room",
+  "toast.unsafeExpandedMessage.title": "Unable to synchronize expanded room",
+  "toast.unsafeExpandedMessage.body": "The expanded lobby state received from the host was incomplete or invalid. Rejoin the lobby and make sure every player uses a compatible Multiplayer Limit Break version.",
   "toast.expansionAvailable.title": "Room can now expand",
   "toast.expansionAvailable.body": "All remaining players support multiplayer expansion. The room can now safely hold up to 16 players.",
   "toast.vanillaAdmissionRestored.title": "Original-client joining restored",

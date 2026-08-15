@@ -3,7 +3,7 @@
   "name": "Multiplayer Limit Break",
   "author": "OLC",
   "description": "Expands multiplayer to 16 players with automatic capability validation, a versioned synchronized transport, extended room layouts, and configurable extra-player scaling.",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true,

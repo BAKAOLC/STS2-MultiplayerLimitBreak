@@ -35,5 +35,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         {
             return protocol >= MinProtocol && protocol <= MaxProtocol;
         }
+
+        public bool IsCompatibleWith(MlbPeerCapability other)
+        {
+            return MinProtocol <= other.MaxProtocol && other.MinProtocol <= MaxProtocol;
+        }
     }
 }

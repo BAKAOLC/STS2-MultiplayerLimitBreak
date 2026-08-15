@@ -3,6 +3,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
+using STS2MultiplayerLimitBreak.Network.Protocol;
 using STS2MultiplayerLimitBreak.Settings;
 using STS2RitsuLib.Patching.Core;
 using STS2RitsuLib.Patching.Models;
@@ -158,6 +159,7 @@ namespace STS2MultiplayerLimitBreak.Network
 
             private static void Prefix()
             {
+                MlbInboundPayloads.Clear();
                 RuntimeMultiplayerSettings.ClearRemoteHostSettings();
             }
         }

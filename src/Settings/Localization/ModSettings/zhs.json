@@ -19,6 +19,8 @@
   "toast.clientUnsafeVanillaRoster.body": "房间中仍有玩家占用扩展槽位：{0}。你的客户端无法安全重建当前大厅状态，因此房主已拒绝你加入。",
   "toast.clientUnsupported.body": "该房间要求受支持的多人扩展协议，房主已拒绝你加入。",
   "toast.clientRejected.title": "无法加入扩容房间",
+  "toast.unsafeExpandedMessage.title": "无法同步扩容房间",
+  "toast.unsafeExpandedMessage.body": "从房主收到的扩容房间状态不完整或无效。请重新加入房间，并确认所有玩家使用兼容版本的多人上限解限。",
   "toast.expansionAvailable.title": "房间现在可以扩容",
   "toast.expansionAvailable.body": "当前所有玩家均支持多人扩展，房间现在可以安全容纳至多 16 名玩家。",
   "toast.vanillaAdmissionRestored.title": "已恢复原版客户端准入",

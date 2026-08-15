@@ -119,10 +119,7 @@ namespace STS2MultiplayerLimitBreak.Settings
             if (snapshot is null)
                 return;
 
-            lock (Gate)
-            {
-                _remoteHostSettings = snapshot;
-            }
+            ApplyRemoteHostSettings(snapshot.ExtraPlayerScalingMultiplier);
         }
 
         private static void OnHandshakeCompleted(SidecarHandshakeCompletedEvent ev)

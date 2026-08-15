@@ -2,6 +2,7 @@ using System.Reflection;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Daily;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
@@ -316,7 +317,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
         private static bool CanRestoreExtendedRoster(MlbPeerCapability? capability)
         {
-            return capability is { } value && value.Supports(MlbPeerCapability.Local.MaxProtocol);
+            return capability is { } value && value.IsCompatibleWith(MlbPeerCapability.Local);
         }
 
         private static void SendRejection(
@@ -361,7 +362,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
             var existingBlockers = players
                 .Where(player => state.GetCapability(player.Id) is not { } capability ||
-                                 !capability.Supports(MlbPeerCapability.Local.MaxProtocol))
+                                 !capability.IsCompatibleWith(MlbPeerCapability.Local))
                 .Select(player => player.Id)
                 .ToArray();
             if (existingBlockers.Length > 0)
@@ -607,7 +608,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             {
                 if (MlbGameApiCompat.ReadPlayer(message).Id == 0)
                 {
-                    RejectUnsafeExpandedMessage(__instance);
+                    RejectUnsafeExpandedMessage(
+                        __instance,
+                        "The extended PlayerJoinedMessage payload was missing or invalid.");
                     return false;
                 }
 
@@ -669,7 +672,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
 
             [HarmonyPriority(Priority.First)]
-            private static bool Prefix(StartRunLobby __instance, ref LobbyBeginRunMessage message)
+            private static bool Prefix(
+                StartRunLobby __instance,
+                ref LobbyBeginRunMessage message,
+                ulong senderId)
             {
                 var snapshot = MlbInboundPayloads.DequeueBeginRun();
                 var state = MlbLobbyProtocolRegistry.GetOrCreate(__instance);
@@ -678,27 +684,41 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 {
                     if (state.ExtendedProtocolActive || lobbyPlayers.Count > Const.VanillaPlayerLimit)
                     {
-                        RejectUnsafeExpandedMessage(__instance);
+                        RejectUnsafeExpandedMessage(
+                            __instance,
+                            "The final lobby snapshot was missing from an expanded run-start message.");
                         return false;
                     }
 
                     return true;
                 }
 
+                var messagePlayers = MlbGameApiCompat.ReadPlayers(message);
+                var authoritativePlayers = snapshot.FullPlayers ?? messagePlayers;
+                if (!HasSameRoster(authoritativePlayers, snapshot.Capabilities) ||
+                    authoritativePlayers.All(player => player.Id != __instance.NetService.NetId) ||
+                    authoritativePlayers.All(player => player.Id != senderId))
+                {
+                    RejectUnsafeExpandedMessage(
+                        __instance,
+                        "The final lobby snapshot did not match its capability roster or omitted a session participant.");
+                    return false;
+                }
+
                 if (snapshot.FullPlayers is { } fullPlayers)
                 {
                     if (!HasSameRoster(lobbyPlayers, fullPlayers))
-                    {
-                        RejectUnsafeExpandedMessage(__instance);
-                        return false;
-                    }
+                        Log.Warn(
+                            "[Multiplayer Limit Break] Reconciled the local lobby roster with the host's " +
+                            $"authoritative run-start roster (local={lobbyPlayers.Count}, host={fullPlayers.Count}).");
 
                     MlbGameApiCompat.WritePlayers(ref message, fullPlayers);
                 }
-                else if (lobbyPlayers.Count > Const.VanillaPlayerLimit ||
-                         snapshot.Capabilities.Count > Const.VanillaPlayerLimit)
+                else if (snapshot.Capabilities.Count > Const.VanillaPlayerLimit)
                 {
-                    RejectUnsafeExpandedMessage(__instance);
+                    RejectUnsafeExpandedMessage(
+                        __instance,
+                        "The expanded final lobby snapshot did not include the complete player roster.");
                     return false;
                 }
 
@@ -715,13 +735,21 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                        lobbyPlayers.Select(player => player.Id).ToHashSet()
                            .SetEquals(snapshotPlayers.Select(player => player.Id));
             }
+
+            private static bool HasSameRoster(
+                IReadOnlyList<MlbLobbyPlayerData> players,
+                IReadOnlyList<MlbPeerCapabilityEntry> capabilities)
+            {
+                return players.Count == capabilities.Count &&
+                       players.Select(player => player.Id).ToHashSet()
+                           .SetEquals(capabilities.Select(entry => entry.PeerId));
+            }
         }
 
-        private static void RejectUnsafeExpandedMessage(StartRunLobby lobby)
+        private static void RejectUnsafeExpandedMessage(StartRunLobby lobby, string detail)
         {
-            MlbLobbyToasts.ShowClientRejection(
-                lobby.NetService,
-                new(MlbJoinRejectionReason.ProtocolMismatch, []));
+            Log.Warn($"[Multiplayer Limit Break] Rejecting unsafe expanded lobby message: {detail}");
+            MlbLobbyToasts.ShowUnsafeExpandedMessage();
             lobby.NetService.Disconnect(NetError.ModMismatch);
         }
 
@@ -767,6 +795,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             private static void Postfix(StartRunLobby __instance)
             {
                 MlbLobbyProtocolRegistry.CleanUp(__instance);
+                MlbInboundPayloads.Clear();
             }
         }
 
@@ -822,6 +851,15 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         public static void EnqueueBeginRun(MlbLobbySnapshot? value) => Enqueue(BeginRunPayloads, value);
         public static MlbLobbySnapshot? DequeueBeginRun() => Dequeue(BeginRunPayloads);
 
+        public static void Clear()
+        {
+            Clear(InitialCapabilities);
+            Clear(JoinCapabilities);
+            Clear(JoinResponses);
+            Clear(PlayerJoinedPayloads);
+            Clear(BeginRunPayloads);
+        }
+
         private static void Enqueue<T>(AsyncLocal<Queue<T>?> storage, T value)
         {
             (storage.Value ??= new()).Enqueue(value);
@@ -830,6 +868,12 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         private static T? Dequeue<T>(AsyncLocal<Queue<T>?> storage)
         {
             return storage.Value is { Count: > 0 } queue ? queue.Dequeue() : default;
+        }
+
+        private static void Clear<T>(AsyncLocal<Queue<T>?> storage)
+        {
+            storage.Value?.Clear();
+            storage.Value = null;
         }
     }
 
