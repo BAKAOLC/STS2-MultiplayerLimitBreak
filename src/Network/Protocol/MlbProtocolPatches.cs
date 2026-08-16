@@ -299,6 +299,9 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                         MlbInboundPayloads.EnqueuePlayerJoined(joinedPayload);
                         message = playerJoined;
                         break;
+                    case LobbyBeginRunMessage when !MlbInboundPayloads.HasPendingBeginRun():
+                        RitsuNetMessageTailExtensions.Read<LobbyBeginRunMessage>(GetReader());
+                        break;
                 }
 
                 PacketReader GetReader()
@@ -849,6 +852,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         public static void EnqueuePlayerJoined(MlbPlayerJoinedPayload? value) => Enqueue(PlayerJoinedPayloads, value);
         public static MlbPlayerJoinedPayload? DequeuePlayerJoined() => Dequeue(PlayerJoinedPayloads);
         public static void EnqueueBeginRun(MlbLobbySnapshot? value) => Enqueue(BeginRunPayloads, value);
+        public static bool HasPendingBeginRun() => BeginRunPayloads.Value is { Count: > 0 };
         public static MlbLobbySnapshot? DequeueBeginRun() => Dequeue(BeginRunPayloads);
 
         public static void Clear()
