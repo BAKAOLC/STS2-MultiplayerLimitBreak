@@ -28,8 +28,10 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             AccessTools.Field(typeof(StartRunLobby), "_maxPlayers")
             ?? AccessTools.Field(typeof(StartRunLobby), "<MaxPlayers>k__BackingField")
             ?? throw new MissingFieldException(typeof(StartRunLobby).FullName, "MaxPlayers");
+
         private static readonly AccessTools.FieldRef<NetMessageBus, PacketWriter> NetMessageBusWriterRef =
             AccessTools.FieldRefAccess<NetMessageBus, PacketWriter>("_writer");
+
         private static readonly AccessTools.FieldRef<NetMessageBus, PacketReader> NetMessageBusReaderRef =
             AccessTools.FieldRefAccess<NetMessageBus, PacketReader>("_reader");
 
@@ -105,7 +107,8 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                     serializeDefinition.MakeGenericMethod(messageType),
                     prefix: prefix == null ? null : new HarmonyMethod(prefix),
                     postfix: postfix == null ? null : new HarmonyMethod(postfix),
-                    description: $"Serialize {messageType.Name} with its MLB tail at the non-inlined message-bus boundary");
+                    description:
+                    $"Serialize {messageType.Name} with its MLB tail at the non-inlined message-bus boundary");
             }
 
             DynamicPatchInfo CreateBeginRunProjectionPatch(string id, Type messageType, Type patchType)
@@ -115,7 +118,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 return new(
                     id,
                     hostBroadcastDefinition.MakeGenericMethod(messageType),
-                    prefix: new HarmonyMethod(prefix),
+                    prefix: new(prefix),
                     description: "Project LobbyBeginRunMessage at the host broadcast boundary before serialization");
             }
         }
@@ -259,6 +262,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         private sealed class NetMessageBusDeserializePatch : IPatchMethod
         {
             public static string PatchId => "mlb_lobby_tail_bus_deserialize";
+
             public static string Description =>
                 "Read MLB lobby tails after each complete vanilla message deserialization pipeline";
 
@@ -304,6 +308,8 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                         break;
                 }
 
+                return;
+
                 PacketReader GetReader()
                 {
                     return NetMessageBusReaderRef(__instance);
@@ -336,14 +342,14 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                     ascension = lobby.Ascension,
                     dailyTime = lobby.DailyTime,
                     seed = lobby.Seed,
-                    modifiers = lobby.Modifiers.Select(static modifier => modifier.ToSerializable()).ToList(),
+                    modifiers = [.. lobby.Modifiers.Select(static modifier => modifier.ToSerializable())],
                 };
                 MlbGameApiCompat.WritePlayers(ref response, MlbGameApiCompat.ReadLobbyPlayers(lobby));
                 using (MlbOutboundJoinRejection.Push(rejection))
                     ((INetHostGameService)lobby.NetService).SendMessage(response, senderId);
             }
 
-            ((INetHostGameService)lobby.NetService).DisconnectClient(senderId, NetError.ModMismatch);
+            MlbGameApiCompat.DisconnectClient((INetHostGameService)lobby.NetService, senderId, NetError.ModMismatch);
             MlbLobbyToasts.ShowHostRejection(lobby.NetService, senderId, rejection);
         }
 
@@ -386,7 +392,11 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
             public static ModPatchTarget[] GetTargets()
             {
-                return [new(typeof(JoinFlow), "HandleInitialGameInfoMessage", [typeof(InitialGameInfoMessage), typeof(ulong)])];
+                return
+                [
+                    new(typeof(JoinFlow), "HandleInitialGameInfoMessage",
+                        [typeof(InitialGameInfoMessage), typeof(ulong)]),
+                ];
             }
 
             private static void Prefix(JoinFlow __instance)
@@ -417,8 +427,11 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
             public static ModPatchTarget[] GetTargets()
             {
-                return [new(typeof(StartRunLobby), "HandleClientLobbyJoinRequestMessage",
-                    [typeof(ClientLobbyJoinRequestMessage), typeof(ulong)])];
+                return
+                [
+                    new(typeof(StartRunLobby), "HandleClientLobbyJoinRequestMessage",
+                        [typeof(ClientLobbyJoinRequestMessage), typeof(ulong)]),
+                ];
             }
 
             [HarmonyPriority(Priority.First)]
@@ -529,8 +542,11 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
             public static ModPatchTarget[] GetTargets()
             {
-                return [new(typeof(JoinFlow), "HandleJoinResponseMessage",
-                    [typeof(ClientLobbyJoinResponseMessage), typeof(ulong)])];
+                return
+                [
+                    new(typeof(JoinFlow), "HandleJoinResponseMessage",
+                        [typeof(ClientLobbyJoinResponseMessage), typeof(ulong)]),
+                ];
             }
 
             [HarmonyPriority(Priority.First)]
@@ -551,16 +567,14 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                     return true;
                 }
 
-                if (MlbLobbyProtocolRegistry.GetRemoteHostCapability(netService) != null)
-                {
-                    MlbLobbyToasts.ShowClientRejection(
-                        netService,
-                        new(MlbJoinRejectionReason.ProtocolMismatch, []));
-                    netService.Disconnect(NetError.ModMismatch);
-                    return false;
-                }
+                if (MlbLobbyProtocolRegistry.GetRemoteHostCapability(netService) == null)
+                    return true;
 
-                return true;
+                MlbLobbyToasts.ShowClientRejection(
+                    netService,
+                    new(MlbJoinRejectionReason.ProtocolMismatch, []));
+                netService.Disconnect(NetError.ModMismatch);
+                return false;
             }
         }
 
@@ -598,12 +612,17 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         private sealed class PlayerJoinedHandlerPatch : IPatchMethod
         {
             public static string PatchId => "mlb_player_joined_tail_handler";
-            public static string Description => "Apply synchronized MLB capability state before original player-join handling";
+
+            public static string Description =>
+                "Apply synchronized MLB capability state before original player-join handling";
 
             public static ModPatchTarget[] GetTargets()
             {
-                return [new(typeof(StartRunLobby), "HandlePlayerJoinedMessage",
-                    [typeof(PlayerJoinedMessage), typeof(ulong)])];
+                return
+                [
+                    new(typeof(StartRunLobby), "HandlePlayerJoinedMessage",
+                        [typeof(PlayerJoinedMessage), typeof(ulong)]),
+                ];
             }
 
             [HarmonyPriority(Priority.First)]
@@ -639,8 +658,11 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
             public static ModPatchTarget[] GetTargets()
             {
-                return [new(typeof(StartRunLobby), "HandlePlayerLeftMessage",
-                    [typeof(PlayerLeftMessage), typeof(ulong)])];
+                return
+                [
+                    new(typeof(StartRunLobby), "HandlePlayerLeftMessage",
+                        [typeof(PlayerLeftMessage), typeof(ulong)]),
+                ];
             }
 
             private static void Postfix(StartRunLobby __instance, PlayerLeftMessage message)
@@ -670,8 +692,11 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
             public static ModPatchTarget[] GetTargets()
             {
-                return [new(typeof(StartRunLobby), "HandleLobbyBeginRunMessage",
-                    [typeof(LobbyBeginRunMessage), typeof(ulong)])];
+                return
+                [
+                    new(typeof(StartRunLobby), "HandleLobbyBeginRunMessage",
+                        [typeof(LobbyBeginRunMessage), typeof(ulong)]),
+                ];
             }
 
             [HarmonyPriority(Priority.First)]
@@ -685,15 +710,13 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 var lobbyPlayers = MlbGameApiCompat.ReadLobbyPlayers(__instance);
                 if (snapshot == null)
                 {
-                    if (state.ExtendedProtocolActive || lobbyPlayers.Count > Const.VanillaPlayerLimit)
-                    {
-                        RejectUnsafeExpandedMessage(
-                            __instance,
-                            "The final lobby snapshot was missing from an expanded run-start message.");
-                        return false;
-                    }
+                    if (!state.ExtendedProtocolActive && lobbyPlayers.Count <= Const.VanillaPlayerLimit)
+                        return true;
 
-                    return true;
+                    RejectUnsafeExpandedMessage(
+                        __instance,
+                        "The final lobby snapshot was missing from an expanded run-start message.");
+                    return false;
                 }
 
                 var messagePlayers = MlbGameApiCompat.ReadPlayers(message);
@@ -731,7 +754,7 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             }
 
             private static bool HasSameRoster(
-                IReadOnlyList<MlbLobbyPlayerData> lobbyPlayers,
+                List<MlbLobbyPlayerData> lobbyPlayers,
                 IReadOnlyList<MlbLobbyPlayerData> snapshotPlayers)
             {
                 return lobbyPlayers.Count == snapshotPlayers.Count &&
@@ -768,13 +791,28 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                     new(
                         typeof(StartRunLobby),
                         ".ctor",
-                        [typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener), typeof(int)],
+                        MlbGameApiCompat.Uses113LobbyApi
+                            ?
+                            [
+                                typeof(GameMode), typeof(bool), typeof(INetGameService), typeof(IStartRunLobbyListener),
+                                typeof(int),
+                            ]
+                            : [typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener), typeof(int)],
                         MethodType.Constructor),
                     new(
                         typeof(StartRunLobby),
                         ".ctor",
-                        [typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener),
-                            typeof(TimeServerResult), typeof(int)],
+                        MlbGameApiCompat.Uses113LobbyApi
+                            ?
+                            [
+                                typeof(GameMode), typeof(bool), typeof(INetGameService), typeof(IStartRunLobbyListener),
+                                typeof(TimeServerResult), typeof(int),
+                            ]
+                            :
+                            [
+                                typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener),
+                                typeof(TimeServerResult), typeof(int),
+                            ],
                         MethodType.Constructor),
                 ];
             }

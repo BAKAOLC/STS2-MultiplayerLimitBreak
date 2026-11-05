@@ -30,7 +30,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Remove="tests\**\*.cs"/>
         <Content Include="mod_manifest.json"/>
         <EmbeddedResource Include="src\Settings\Localization\ModSettings\*.json">
             <LogicalName>$(RootNamespace).Settings.Localization.ModSettings.%(Filename)%(Extension)</LogicalName>

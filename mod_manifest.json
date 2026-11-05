@@ -3,7 +3,7 @@
   "name": "Multiplayer Limit Break",
   "author": "OLC",
   "description": "Up to 16 players per run, with Steam room invites, match groups, and adjustable extra-player scaling.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": true,

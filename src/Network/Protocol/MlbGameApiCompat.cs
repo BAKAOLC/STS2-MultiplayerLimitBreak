@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
@@ -18,16 +19,19 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         int MaxMultiplayerAscensionUnlocked,
         object? VersionInfo,
         bool IsModded,
-        bool IsReady);
+        bool IsReady,
+        bool IsRotatingDread = false,
+        int MaxBlitzAscension = 0);
 
     internal static class MlbGameApiCompat
     {
         private const string NewPlayerTypeName =
             "MegaCrit.Sts2.Core.Entities.Multiplayer.StartRunLobbyPlayer";
+
         private const string LegacyPlayerTypeName =
             "MegaCrit.Sts2.Core.Entities.Multiplayer.LobbyPlayer";
 
-        private static readonly Type PlayerType =
+        public static Type RuntimePlayerType { get; } =
             AccessTools.TypeByName(NewPlayerTypeName)
             ?? AccessTools.TypeByName(LegacyPlayerTypeName)
             ?? throw new TypeLoadException("Could not find the start-run lobby player type.");
@@ -36,11 +40,25 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         private static readonly FieldInfo PlayerSlotIdField = RequirePlayerField("slotId");
         private static readonly FieldInfo PlayerCharacterField = RequirePlayerField("character");
         private static readonly FieldInfo PlayerUnlockStateField = RequirePlayerField("unlockState");
+
         private static readonly FieldInfo PlayerMaxAscensionField =
-            RequirePlayerField("maxMultiplayerAscensionUnlocked");
-        private static readonly FieldInfo? PlayerVersionInfoField = AccessTools.Field(PlayerType, "versionInfo");
-        private static readonly FieldInfo? PlayerIsModdedField = AccessTools.Field(PlayerType, "isModded");
+            AccessTools.Field(RuntimePlayerType, "maxStandardAscension")
+            ?? RequirePlayerField("maxMultiplayerAscensionUnlocked");
+
+        private static readonly FieldInfo? PlayerMaxBlitzAscensionField =
+            AccessTools.Field(RuntimePlayerType, "maxBlitzAscension");
+
+        internal static bool Uses113LobbyApi => PlayerMaxBlitzAscensionField != null;
+
+        private static readonly FieldInfo? PlayerVersionInfoField = AccessTools.Field(RuntimePlayerType, "versionInfo");
+        private static readonly FieldInfo? PlayerIsModdedField = AccessTools.Field(RuntimePlayerType, "isModded");
         private static readonly FieldInfo PlayerReadyField = RequirePlayerField("isReady");
+
+        private static readonly FieldInfo? PlayerRotatingDreadField =
+            AccessTools.Field(RuntimePlayerType, "isRotatingDread");
+
+        private static readonly Action<INetHostGameService, ulong, NetError, bool, string?> DisconnectHostClient =
+            CreateDisconnectHostClient();
 
         private static readonly PropertyInfo LobbyPlayersProperty =
             AccessTools.Property(typeof(StartRunLobby), nameof(StartRunLobby.Players))
@@ -52,12 +70,17 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
         private static readonly FieldInfo JoinResponsePlayersField =
             RequireField(typeof(ClientLobbyJoinResponseMessage), "playersInLobby");
+
         private static readonly FieldInfo BeginRunPlayersField =
             RequireField(typeof(LobbyBeginRunMessage), "playersInLobby");
+
         private static readonly FieldInfo PlayerJoinedPlayerField =
             RequireField(typeof(PlayerJoinedMessage), "lobbyPlayer");
 
-        public static Type RuntimePlayerType => PlayerType;
+        public static void DisconnectClient(INetHostGameService service, ulong peerId, NetError reason)
+        {
+            DisconnectHostClient(service, peerId, reason, false, null);
+        }
 
         public static INetGameService GetNetService(JoinFlow joinFlow)
         {
@@ -144,16 +167,16 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             if (rawPlayers is not IEnumerable enumerable)
                 throw new InvalidDataException("Lobby message has no player list.");
 
-            var players = new List<MlbLobbyPlayerData>();
-            foreach (var player in enumerable)
-                players.Add(ReadPlayer(player
-                                       ?? throw new InvalidDataException("Lobby player list contains null.")));
-            return players;
+            return
+            [
+                .. enumerable.Cast<object?>().Select(player =>
+                    ReadPlayer(player ?? throw new InvalidDataException("Lobby player list contains null."))),
+            ];
         }
 
         private static MlbLobbyPlayerData ReadPlayer(object player)
         {
-            if (player.GetType() != PlayerType)
+            if (player.GetType() != RuntimePlayerType)
                 throw new InvalidDataException($"Unexpected lobby player type: {player.GetType().FullName}.");
 
             return new(
@@ -164,30 +187,34 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
                 (int)PlayerMaxAscensionField.GetValue(player)!,
                 PlayerVersionInfoField?.GetValue(player),
                 PlayerIsModdedField?.GetValue(player) as bool? ?? false,
-                (bool)PlayerReadyField.GetValue(player)!);
+                (bool)PlayerReadyField.GetValue(player)!,
+                PlayerRotatingDreadField?.GetValue(player) as bool? ?? false,
+                PlayerMaxBlitzAscensionField?.GetValue(player) as int? ?? 0);
         }
 
         private static object CreatePlayer(MlbLobbyPlayerData data)
         {
-            var player = Activator.CreateInstance(PlayerType)
+            var player = Activator.CreateInstance(RuntimePlayerType)
                          ?? throw new InvalidOperationException("Could not create a lobby player value.");
             PlayerIdField.SetValue(player, data.Id);
             PlayerSlotIdField.SetValue(player, data.SlotId);
             PlayerCharacterField.SetValue(player, data.Character);
             PlayerUnlockStateField.SetValue(player, data.UnlockState);
             PlayerMaxAscensionField.SetValue(player, data.MaxMultiplayerAscensionUnlocked);
+            PlayerMaxBlitzAscensionField?.SetValue(player, data.MaxBlitzAscension);
             if (PlayerVersionInfoField != null)
                 PlayerVersionInfoField.SetValue(
                     player,
                     data.VersionInfo ?? Activator.CreateInstance(PlayerVersionInfoField.FieldType));
             PlayerIsModdedField?.SetValue(player, data.IsModded);
             PlayerReadyField.SetValue(player, data.IsReady);
+            PlayerRotatingDreadField?.SetValue(player, data.IsRotatingDread);
             return player;
         }
 
         private static object CreatePlayerList(IEnumerable<MlbLobbyPlayerData> players)
         {
-            var listType = typeof(List<>).MakeGenericType(PlayerType);
+            var listType = typeof(List<>).MakeGenericType(RuntimePlayerType);
             var list = (IList)(Activator.CreateInstance(listType)
                                ?? throw new InvalidOperationException("Could not create a lobby player list."));
             foreach (var player in players)
@@ -204,8 +231,27 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
 
         private static FieldInfo RequirePlayerField(string name)
         {
-            return AccessTools.Field(PlayerType, name)
-                   ?? throw new MissingFieldException(PlayerType.FullName, name);
+            return AccessTools.Field(RuntimePlayerType, name)
+                   ?? throw new MissingFieldException(RuntimePlayerType.FullName, name);
+        }
+
+        private static Action<INetHostGameService, ulong, NetError, bool, string?> CreateDisconnectHostClient()
+        {
+            var method = AccessTools.DeclaredMethod(
+                typeof(INetHostGameService),
+                nameof(INetHostGameService.DisconnectClient),
+                [typeof(ulong), typeof(NetError), typeof(bool), typeof(string)]);
+            if (method != null)
+                return method.CreateDelegate<Action<INetHostGameService, ulong, NetError, bool, string?>>();
+
+            var legacyMethod = AccessTools.DeclaredMethod(
+                                   typeof(INetHostGameService),
+                                   nameof(INetHostGameService.DisconnectClient),
+                                   [typeof(ulong), typeof(NetError), typeof(bool)])
+                               ?? throw new MissingMethodException(typeof(INetHostGameService).FullName,
+                                   nameof(INetHostGameService.DisconnectClient));
+            var legacyDisconnect = legacyMethod.CreateDelegate<Action<INetHostGameService, ulong, NetError, bool>>();
+            return (service, peerId, reason, now, _) => legacyDisconnect(service, peerId, reason, now);
         }
 
         private static FieldInfo RequireField(Type type, string name)

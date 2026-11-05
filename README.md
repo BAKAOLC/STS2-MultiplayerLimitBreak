@@ -10,7 +10,7 @@
 
 模组始终从原版联机 mod 匹配列表中排除，通过独立的能力握手决定是否允许扩容。额外人数倍率在联机时自动跟随房主设置。
 
-同一个 DLL 通过运行时 API 适配同时支持游戏 0.107.1 的 `LobbyPlayer` 和新版本的 `StartRunLobbyPlayer`，无需按游戏版本替换模组 DLL。
+支持游戏 0.107.1、0.111 和 0.113。
 
 大厅玩家列表上方会常驻显示“【多人上限解限】已激活”或“因不兼容客户端已禁用”，并附带当前人数和对应上限。进入 5 人扩容状态后文本保持不变，仅将状态颜色由绿色变为蓝色。相关玩家名称旁会显示小型琥珀色警告三角，不会覆盖原版头像上的准备或断线状态。
 
@@ -41,7 +41,7 @@ Since 0.2.0, there is no enable switch and vanilla message field widths are left
 
 The mod is always removed from vanilla multiplayer mod matching and uses its own capability handshake for expansion admission. The extra-player scaling multiplier follows the host during multiplayer.
 
-The same DLL supports both the `LobbyPlayer` API used by game 0.107.1 and the `StartRunLobbyPlayer` API used by newer versions through runtime adaptation; no version-specific mod DLL is required.
+Supports game 0.107.1, 0.111, and 0.113.
 
 A persistent Multiplayer Limit Break indicator above the lobby player list reports Active or Disabled by incompatible clients together with the current player count and applicable limit. After five-player expansion activates, the text stays unchanged and the indicator changes from green to blue. Affected players receive a small amber warning triangle beside the nameplate without touching the vanilla ready or disconnected indicators.
 

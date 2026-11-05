@@ -4,9 +4,11 @@ namespace STS2MultiplayerLimitBreak
     {
         internal const string ModId = "STS2-MultiplayerLimitBreak";
 
-        internal const string Version = "0.3.1";
+        internal const string Version = "0.3.2";
 
-        internal const byte WireProtocolVersion = 2;
+        internal static byte WireProtocolVersion => Network.Protocol.MlbGameApiCompat.Uses113LobbyApi
+            ? (byte)3
+            : (byte)2;
 
         internal const string SettingsKey = "settings";
 

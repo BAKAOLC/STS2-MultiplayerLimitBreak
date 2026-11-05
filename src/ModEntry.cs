@@ -78,6 +78,13 @@ namespace STS2MultiplayerLimitBreak
                 patcher,
                 DisableMod,
                 "Required multiplayer scaling patches failed. STS2-MultiplayerLimitBreak will be disabled.");
+            if (!IsActive) return;
+
+            if (DifficultyScalingPatches.ApplyPowerScalingPatches(patcher)) return;
+
+            Log.Error(
+                "Required multiplayer power scaling patches failed. STS2-MultiplayerLimitBreak will be disabled.");
+            DisableMod();
         }
 
         private static void DisableMod()

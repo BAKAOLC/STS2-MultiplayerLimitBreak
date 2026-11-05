@@ -5,7 +5,7 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
-using MegaCrit.Sts2.Core.Models.Singleton;
+using MegaCrit.Sts2.Core.Runs;
 using STS2MultiplayerLimitBreak.Settings;
 using STS2RitsuLib.Patching.Builders;
 using STS2RitsuLib.Patching.Core;
@@ -24,17 +24,27 @@ namespace STS2MultiplayerLimitBreak.Network
         private static readonly MethodInfo? CombatStatePlayersGetter =
             AccessTools.PropertyGetter(typeof(ICombatState), nameof(ICombatState.Players));
 
+        private static readonly Type MultiplayerScalingModelType =
+            typeof(AbstractModel).Assembly.GetType("MegaCrit.Sts2.Core.Models.MultiplayerScalingModel")
+            ?? typeof(AbstractModel).Assembly.GetType("MegaCrit.Sts2.Core.Models.Singleton.MultiplayerScalingModel")
+            ?? throw new InvalidOperationException("Multiplayer scaling model was not found.");
+
         private static readonly FieldInfo? RunStateField =
-            AccessTools.Field(typeof(MultiplayerScalingModel), "_runState");
+            AccessTools.DeclaredField(MultiplayerScalingModelType, "_runState");
+
+        private static readonly MethodInfo? RunStateGetter =
+            AccessTools.DeclaredPropertyGetter(MultiplayerScalingModelType.BaseType, "RunState");
+
+        private static readonly MethodInfo? RunStatePlayersGetter =
+            AccessTools.PropertyGetter(typeof(RunState), nameof(RunState.Players));
 
         public static void AddTo(ModPatcher patcher)
         {
             patcher.RegisterPatch<ScaleMonsterHpPatch>();
             patcher.RegisterPatch<ModifyBlockScalingPatch>();
-            AddPowerScalingPatches(patcher);
         }
 
-        private static void AddPowerScalingPatches(ModPatcher patcher)
+        public static bool ApplyPowerScalingPatches(ModPatcher patcher)
         {
             var transpiler = DynamicPatchBuilder.FromMethod(
                 typeof(DifficultyScalingPatches),
@@ -73,10 +83,10 @@ namespace STS2MultiplayerLimitBreak.Network
                     description: "Apply host player-scaling multiplier to multiplayer power scaling");
             }
 
-            patcher.RegisterDynamicPatches([.. builder.Patches]);
+            return patcher.ApplyDynamic(builder, rollbackOnCriticalFailure: true);
         }
 
-        private static IEnumerable<CodeInstruction> PowerScalingTranspiler(IEnumerable<CodeInstruction> instructions)
+        private static List<CodeInstruction> PowerScalingTranspiler(IEnumerable<CodeInstruction> instructions)
         {
             return PatchCountAfterPlayersGetter(
                 instructions,
@@ -84,44 +94,30 @@ namespace STS2MultiplayerLimitBreak.Network
                 "mlb_power_multiplayer_scaling_count");
         }
 
-        private static IEnumerable<CodeInstruction> BlockScalingTranspiler(IEnumerable<CodeInstruction> instructions)
+        private static List<CodeInstruction> BlockScalingTranspiler(IEnumerable<CodeInstruction> instructions)
         {
-            var runStateField = RunStateField
-                                ?? throw new InvalidOperationException(
-                                    "MultiplayerScalingModel._runState field was not found.");
+            if (RunStateField == null && RunStateGetter == null)
+                throw new InvalidOperationException("Multiplayer scaling run-state accessor was not found.");
+
+            var playersGetter = RunStatePlayersGetter
+                                ?? throw new InvalidOperationException("Run-state players getter was not found.");
             var rewriter = HarmonyIlRewriter.From(instructions);
-            var awaitingCount = false;
             var report = rewriter.ReplaceEach(
                 "mlb_block_multiplayer_scaling_count",
-                (code, index) =>
-                {
-                    var instruction = code[index];
-                    if (instruction.LoadsField(runStateField))
-                    {
-                        awaitingCount = true;
-                        return false;
-                    }
-
-                    if (awaitingCount && IsIntCountGetter(instruction))
-                    {
-                        awaitingCount = false;
-                        return true;
-                    }
-
-                    if (awaitingCount && IsControlFlowBoundary(instruction))
-                        awaitingCount = false;
-
-                    return false;
-                },
+                (code, index) => index >= 2 && IsIntCountGetter(code[index])
+                                            && HarmonyIl.IsCallTo(code[index - 1], playersGetter)
+                                            && ((RunStateField != null && code[index - 2].LoadsField(RunStateField))
+                                                || (RunStateGetter != null &&
+                                                    HarmonyIl.IsCallTo(code[index - 2], RunStateGetter))),
                 (code, index) => [code[index].Clone(), HarmonyIl.Call(EffectivePlayerCountMethod)],
-                code => HasEffectivePlayerCountCall(code));
+                HasEffectivePlayerCountCall);
 
             report.RequireSucceeded();
             report.RequireExactly(1);
             return rewriter.InstructionsChecked("mlb_block_multiplayer_scaling_count");
         }
 
-        private static IEnumerable<CodeInstruction> PatchCountAfterPlayersGetter(
+        private static List<CodeInstruction> PatchCountAfterPlayersGetter(
             IEnumerable<CodeInstruction> instructions,
             MethodInfo? playersGetter,
             string operation)
@@ -142,19 +138,15 @@ namespace STS2MultiplayerLimitBreak.Network
                         return false;
                     }
 
-                    if (awaitingCount && IsIntCountGetter(instruction))
-                    {
-                        awaitingCount = false;
-                        return true;
-                    }
+                    if (!awaitingCount)
+                        return false;
 
-                    if (awaitingCount && IsControlFlowBoundary(instruction))
-                        awaitingCount = false;
-
-                    return false;
+                    var hasCount = IsIntCountGetter(instruction);
+                    awaitingCount = !hasCount && !IsControlFlowBoundary(instruction);
+                    return hasCount;
                 },
                 (code, index) => [code[index].Clone(), HarmonyIl.Call(EffectivePlayerCountMethod)],
-                code => HasEffectivePlayerCountCall(code));
+                HasEffectivePlayerCountCall);
 
             report.RequireSucceeded();
             report.RequireExactly(1);
@@ -181,7 +173,7 @@ namespace STS2MultiplayerLimitBreak.Network
             return code.Any(instruction => HarmonyIl.IsCallTo(instruction, EffectivePlayerCountMethod));
         }
 
-        private sealed class ScaleMonsterHpPatch : IPatchMethod
+        internal sealed class ScaleMonsterHpPatch : IPatchMethod
         {
             public static string PatchId => "mlb_scale_monster_hp_player_count";
 
@@ -195,13 +187,13 @@ namespace STS2MultiplayerLimitBreak.Network
                 ];
             }
 
-            private static void Prefix(ref int playerCount)
+            public static void Prefix(ref int playerCount)
             {
                 playerCount = RuntimeMultiplayerSettings.GetEffectivePlayerCount(playerCount);
             }
         }
 
-        private sealed class ModifyBlockScalingPatch : IPatchMethod
+        internal sealed class ModifyBlockScalingPatch : IPatchMethod
         {
             public static string PatchId => "mlb_modify_block_player_count";
 
@@ -211,11 +203,11 @@ namespace STS2MultiplayerLimitBreak.Network
             {
                 return
                 [
-                    new(typeof(MultiplayerScalingModel), nameof(MultiplayerScalingModel.ModifyBlockMultiplicative)),
+                    new(MultiplayerScalingModelType, nameof(AbstractModel.ModifyBlockMultiplicative)),
                 ];
             }
 
-            private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+            public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
             {
                 return BlockScalingTranspiler(instructions);
             }

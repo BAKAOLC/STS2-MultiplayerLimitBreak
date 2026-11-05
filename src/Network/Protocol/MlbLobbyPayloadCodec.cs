@@ -66,17 +66,15 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         {
             return Read<MlbJoinResponsePayload>(payload, reader =>
             {
-                if (reader.ReadBool())
-                {
-                    var reason = (MlbJoinRejectionReason)reader.ReadByte();
-                    var count = reader.ReadInt(5);
-                    var blockers = new List<ulong>(count);
-                    for (var i = 0; i < count; i++)
-                        blockers.Add(reader.ReadULong());
-                    return new(null, new(reason, blockers));
-                }
+                if (!reader.ReadBool())
+                    return new(ReadSnapshot(reader), null);
 
-                return new(ReadSnapshot(reader), null);
+                var reason = (MlbJoinRejectionReason)reader.ReadByte();
+                var count = reader.ReadInt(5);
+                var blockers = new List<ulong>(count);
+                for (var i = 0; i < count; i++)
+                    blockers.Add(reader.ReadULong());
+                return new(null, new(reason, blockers));
             });
         }
 
@@ -160,8 +158,8 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
         private static void ValidateSnapshot(
             bool active,
             byte protocol,
-            IReadOnlyList<MlbPeerCapabilityEntry> capabilities,
-            IReadOnlyList<MlbLobbyPlayerData>? players)
+            List<MlbPeerCapabilityEntry> capabilities,
+            List<MlbLobbyPlayerData>? players)
         {
             if (active && !MlbPeerCapability.Local.Supports(protocol))
                 throw new InvalidDataException($"Unsupported active MLB protocol version: {protocol}.");
@@ -232,6 +230,12 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             writer.WriteModel(player.Character);
             writer.Write(player.UnlockState);
             writer.WriteInt(player.MaxMultiplayerAscensionUnlocked);
+            if (MlbGameApiCompat.Uses113LobbyApi)
+            {
+                writer.WriteInt(player.MaxBlitzAscension);
+                writer.WriteBool(player.IsRotatingDread);
+            }
+
             MlbGameApiCompat.WriteVersionInfo(writer, player);
             MlbGameApiCompat.WriteIsModded(writer, player);
             writer.WriteBool(player.IsReady);
@@ -244,10 +248,13 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             var character = reader.ReadModel<CharacterModel>();
             var unlockState = reader.Read<MegaCrit.Sts2.Core.Unlocks.SerializableUnlockState>();
             var maxAscension = reader.ReadInt();
+            var maxBlitzAscension = MlbGameApiCompat.Uses113LobbyApi ? reader.ReadInt() : 0;
+            var isRotatingDread = MlbGameApiCompat.Uses113LobbyApi && reader.ReadBool();
             var versionInfo = MlbGameApiCompat.ReadVersionInfo(reader);
             var isModded = MlbGameApiCompat.ReadIsModded(reader, versionInfo);
             var isReady = reader.ReadBool();
-            return new(id, slotId, character, unlockState, maxAscension, versionInfo, isModded, isReady);
+            return new(id, slotId, character, unlockState, maxAscension, versionInfo, isModded, isReady,
+                isRotatingDread, maxBlitzAscension);
         }
 
         private static byte[] Write(Action<PacketWriter> write)
@@ -255,13 +262,13 @@ namespace STS2MultiplayerLimitBreak.Network.Protocol
             var writer = new PacketWriter { WarnOnGrow = false };
             write(writer);
             writer.ZeroByteRemainder();
-            return writer.Buffer.AsSpan(0, writer.BytePosition).ToArray();
+            return [.. writer.Buffer.AsSpan(0, writer.BytePosition)];
         }
 
         private static T Read<T>(ReadOnlySpan<byte> payload, Func<PacketReader, T> read)
         {
             var reader = new PacketReader();
-            reader.Reset(payload.ToArray());
+            reader.Reset([.. payload]);
             return read(reader);
         }
     }

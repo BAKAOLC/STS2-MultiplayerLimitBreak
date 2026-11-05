@@ -5,7 +5,6 @@ using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Nodes.Screens.TreasureRoomRelic;
 using MegaCrit.Sts2.Core.Runs;
-using STS2MultiplayerLimitBreak.Settings;
 using STS2RitsuLib.Patching.Core;
 using STS2RitsuLib.Patching.Models;
 
@@ -13,6 +12,8 @@ namespace STS2MultiplayerLimitBreak.Layout
 {
     internal static class TreasureRoomRelicLayoutPatches
     {
+        private const string HolderScenePath = "res://scenes/ui/treasure_relic_holder.tscn";
+
         private const float FallbackHolderXStep = 220f;
 
         private const float MinHolderXStep = 190f;
@@ -25,6 +26,9 @@ namespace STS2MultiplayerLimitBreak.Layout
         private static readonly FieldInfo? MultiplayerHoldersField =
             AccessTools.Field(typeof(NTreasureRoomRelicCollection), "_multiplayerHolders");
 
+        private static readonly FieldInfo? HolderLayoutsField =
+            AccessTools.Field(typeof(NTreasureRoomRelicCollection), "_holderLayouts");
+
         private static readonly FieldInfo? RunStateField =
             AccessTools.Field(typeof(NTreasureRoomRelicCollection), "_runState");
 
@@ -36,11 +40,17 @@ namespace STS2MultiplayerLimitBreak.Layout
 
         private static void EnsureHolderCount(NTreasureRoomRelicCollection collection)
         {
+            if (HolderLayoutsField?.GetValue(collection) is List<Control> layouts)
+            {
+                EnsureIndexedLayouts(layouts);
+                return;
+            }
+
             var holdersInUse = GetHoldersInUse(collection);
             holdersInUse?.Clear();
 
             var multiplayerHolders = GetMultiplayerHolders(collection);
-            if (multiplayerHolders != null && multiplayerHolders.Count > Const.VanillaPlayerLimit)
+            if (multiplayerHolders is { Count: > Const.VanillaPlayerLimit })
                 for (var i = multiplayerHolders.Count - 1; i >= Const.VanillaPlayerLimit; i--)
                 {
                     var holder = multiplayerHolders[i];
@@ -56,16 +66,12 @@ namespace STS2MultiplayerLimitBreak.Layout
                 return;
 
             var template = multiplayerHolders[^1];
-            var scene = string.IsNullOrEmpty(template.SceneFilePath)
-                ? null
-                : PreloadManager.Cache.GetScene(template.SceneFilePath);
+            var scene = PreloadManager.Cache.GetScene(HolderScenePath);
             var parent = template.GetParent();
 
             for (var i = multiplayerHolders.Count; i < currentRelics.Count; i++)
             {
-                var holder = scene?.Instantiate<NTreasureRoomRelicHolder>()
-                             ?? template.Duplicate() as NTreasureRoomRelicHolder;
-                if (holder == null) continue;
+                var holder = scene.Instantiate<NTreasureRoomRelicHolder>();
 
                 holder.Name = $"AutoHolder_{i + 1}";
                 holder.Visible = false;
@@ -74,10 +80,56 @@ namespace STS2MultiplayerLimitBreak.Layout
             }
         }
 
+        private static void EnsureIndexedLayouts(List<Control> layouts)
+        {
+            var currentRelics = RunManager.Instance.TreasureRoomRelicSynchronizer.CurrentRelics;
+            if (currentRelics == null || currentRelics.Count <= layouts.Count)
+                return;
+
+            var scene = PreloadManager.Cache.GetScene(HolderScenePath);
+            var parent = layouts[0].GetParent();
+            for (var layoutIndex = layouts.Count; layoutIndex < currentRelics.Count; layoutIndex++)
+            {
+                var layout = new Control
+                {
+                    Name = $"MLBLayout_{layoutIndex + 1}",
+                    Visible = false,
+                };
+                parent.AddChild(layout);
+                layout.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+
+                List<NTreasureRoomRelicHolder> holders = new(layoutIndex + 1);
+                for (var holderIndex = 0; holderIndex <= layoutIndex; holderIndex++)
+                {
+                    var holder = scene.Instantiate<NTreasureRoomRelicHolder>();
+                    holder.Name = $"AutoHolder_{holderIndex + 1}";
+                    layout.AddChild(holder);
+                    holders.Add(holder);
+                }
+
+                var columns = Math.Min(Const.VanillaPlayerLimit, holders.Count);
+                var rowCount = (int)Math.Ceiling(holders.Count / (float)columns);
+                var center = (layout.Size - holders[0].Size) * 0.5f;
+                var yStep = Math.Max(MinHolderYStep, holders[0].Size.Y + 24f);
+                for (var row = 0; row < rowCount; row++)
+                {
+                    var startIndex = row * columns;
+                    var count = Math.Min(columns, holders.Count - startIndex);
+                    var y = center.Y + (row - (rowCount - 1) * 0.5f) * yStep;
+                    LayoutRow(holders, startIndex, count, y, center.X, FallbackHolderXStep);
+                }
+
+                layouts.Add(layout);
+            }
+        }
+
         private static void RepositionHolders(NTreasureRoomRelicCollection collection)
         {
+            if (HolderLayoutsField != null)
+                return;
+
             var holdersInUse = GetHoldersInUse(collection);
-            if (holdersInUse == null || holdersInUse.Count <= Const.VanillaPlayerLimit) return;
+            if (holdersInUse is not { Count: > Const.VanillaPlayerLimit }) return;
 
             var minX = float.MaxValue;
             var maxX = float.MinValue;
@@ -130,6 +182,9 @@ namespace STS2MultiplayerLimitBreak.Layout
             var localPlayer = runState != null ? LocalContext.GetMe(runState.Players) : null;
             var playerSlotIndex =
                 localPlayer != null && runState != null ? runState.GetPlayerSlotIndex(localPlayer) : 0;
+            if (playerSlotIndex >= 0 && playerSlotIndex < holdersInUse.Count)
+                return true;
+
             playerSlotIndex = Math.Clamp(playerSlotIndex, 0, holdersInUse.Count - 1);
             result = holdersInUse[playerSlotIndex];
             return false;
@@ -150,6 +205,7 @@ namespace STS2MultiplayerLimitBreak.Layout
             return RunStateField?.GetValue(collection) as IRunState;
         }
 
+        // ReSharper disable once ClassNeverInstantiated.Local
         private sealed class InitializeRelicsPatch : IPatchMethod
         {
             public static string PatchId => "mlb_treasure_room_relic_holder_layout";
@@ -166,17 +222,22 @@ namespace STS2MultiplayerLimitBreak.Layout
                 ];
             }
 
+            // ReSharper disable once InconsistentNaming
+            // ReSharper disable once UnusedMember.Local
             private static void Prefix(NTreasureRoomRelicCollection __instance)
             {
                 EnsureHolderCount(__instance);
             }
 
+            // ReSharper disable once InconsistentNaming
+            // ReSharper disable once UnusedMember.Local
             private static void Postfix(NTreasureRoomRelicCollection __instance)
             {
                 RepositionHolders(__instance);
             }
         }
 
+        // ReSharper disable once ClassNeverInstantiated.Local
         private sealed class DefaultFocusedControlPatch : IPatchMethod
         {
             public static string PatchId => "mlb_treasure_room_relic_default_focus";
@@ -191,10 +252,13 @@ namespace STS2MultiplayerLimitBreak.Layout
                 ];
             }
 
+            // ReSharper disable InconsistentNaming
+            // ReSharper disable once UnusedMember.Local
             private static bool Prefix(NTreasureRoomRelicCollection __instance, ref Control __result)
             {
                 return TryGetDefaultFocusedControl(__instance, ref __result);
             }
+            // ReSharper restore InconsistentNaming
         }
     }
 }
